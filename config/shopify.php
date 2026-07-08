@@ -7,7 +7,7 @@ return [
     'api_secret' => env('SHOPIFY_API_SECRET'),
 
     // Pinned Admin API version — bump deliberately, in this one place.
-    'api_version' => env('SHOPIFY_API_VERSION', '2026-04'),
+    'api_version' => env('SHOPIFY_API_VERSION', '2026-07'),
 
     'app_url' => env('APP_URL'),
 

@@ -3,7 +3,7 @@
 # column in Shopify Admin — a custom `source_name` alone does not (this is the
 # engine's proven precedent). Deploy with `shopify app deploy`.
 
-api_version = "2026-04"
+api_version = "2026-07"
 
 [[extensions]]
 type = "sales_channel"
