@@ -11,6 +11,13 @@ return [
 
     'app_url' => env('APP_URL'),
 
+    // The single store this app serves (also captured via OAuth). Used for the
+    // embedded CSP frame-ancestors allow-list.
+    'shop_domain' => env('SHOPIFY_SHOP_DOMAIN'),
+
+    // Embedded admin (opens inside Shopify Admin via App Bridge).
+    'embedded' => filter_var(env('SHOPIFY_EMBEDDED', true), FILTER_VALIDATE_BOOL),
+
     // OAuth scopes requested at install (ARCHITECTURE.md §1b).
     'oauth_scopes' => env(
         'SHOPIFY_SCOPES',
