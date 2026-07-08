@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\ValidateApiSecret;
+use App\Http\Middleware\VerifyShopifyWebhook;
 use App\Http\Middleware\VerifyStorefrontToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -20,12 +21,16 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->prefix('storefront')
                 ->name('storefront.')
                 ->group(base_path('routes/storefront.php'));
+
+            // Shopify app surface — OAuth + webhooks (no web session / no CSRF).
+            Route::group([], base_path('routes/shopify.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'storefront.token' => VerifyStorefrontToken::class,
             'api.secret' => ValidateApiSecret::class,
+            'shopify.webhook' => VerifyShopifyWebhook::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -1,0 +1,23 @@
+# Shopify app manifest (custom distribution, single store).
+# Managed with the Shopify CLI: `shopify app deploy`.
+# Fill client_id + application_url from the Partner Dashboard app you create.
+
+name = "Mills Subscriptions"
+handle = "mills-subscriptions"
+# client_id = "REPLACE_WITH_PARTNER_APP_CLIENT_ID"
+application_url = "https://REPLACE_WITH_APP_URL"
+embedded = false
+
+[access_scopes]
+scopes = "read_products,read_orders,write_orders,read_draft_orders,write_draft_orders,read_customers,write_customers"
+
+[auth]
+redirect_urls = [
+  "https://REPLACE_WITH_APP_URL/shopify/callback",
+]
+
+[webhooks]
+api_version = "2026-04"
+
+[build]
+include_config_on_deploy = true
