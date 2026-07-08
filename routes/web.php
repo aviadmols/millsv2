@@ -2,6 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// Root goes straight to the admin panel; Filament redirects to /admin/login
+// when unauthenticated. No default Laravel splash page.
+Route::get('/', fn () => redirect('/admin'));
