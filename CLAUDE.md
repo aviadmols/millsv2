@@ -1,9 +1,10 @@
 # Mills Subscriptions v2 — Project Laws (CLAUDE.md)
 
-Single-tenant Shopify **custom-app** backend for Mills IL dog-food subscriptions, billed via
+Single-store Shopify-**app** backend for Mills IL dog-food subscriptions, billed via
 **PayMe**. Laravel 12 + Filament + Postgres/Redis on Railway (web / worker / scheduler).
 Architecture is ported from the PayPlus Subscriptions blueprint
-(`Projects\תוסף RECHAREG לPAYPLUS`) **minus multi-tenancy**.
+(`Projects\תוסף RECHAREG לPAYPLUS`) **minus multi-tenancy**; the Shopify connection is a real
+Partner-Dashboard app (OAuth offline token + Sales Channel extension), not a pasted admin token.
 
 The locked contract lives in `ARCHITECTURE.md` (state machines, idempotency keys, schema,
 topology) and `docs/SYSTEM-MAP.md` §3 (the frozen HTTP contract). When code and those documents
@@ -47,6 +48,21 @@ disagree, the documents win.
     Procfile). Never a backgrounded child of the web process. Every scheduled command writes a
     heartbeat; the observability page must show it. There is NO cache enable-toggle for
     billing — the only off switch is the `BILLING_KILL_SWITCH` env var (explicit + logged).
+11. **Every Shopify order goes through `ShopifyOrderAttribution`.** `source_name` must equal
+    the Sales-Channel handle (`mills-subscriptions`) so orders appear under the app's channel;
+    creating a Shopify order through any other path is a contract violation. Recurring paid
+    orders use `orderCreate` + inline `{kind:'sale', gateway:'manual', source:'external'}`
+    transaction (money already moved via PayMe) — never a second real charge.
+12. **Mail reads admin-managed `mail_settings`** (per-template subject/body + encrypted SMTP
+    override, editable in the panel with test-send) — never hardcoded mailer creds. 019 SMS
+    goes through the `SmsSender` contract; its secrets live in env, referenced by config only.
+13. **Address writes: local DB first, then push to the Shopify customer** (compensating,
+    logged — a Shopify failure never blocks the local write; `address_pushed_at` tracks sync).
+14. **Cancellation is immediate by definition** — the terminal transition executes at once,
+    `next_charge_at` cleared, Timeline + email. No end-of-period mode anywhere.
+15. **Hot paths read the local product cache** (`products`/`product_variants`, incl. image CDN
+    URLs) — never live Shopify GraphQL from a request path. The cache is refreshed by
+    `products/*` webhooks, the nightly job, and the manual admin button.
 
 ## Conventions
 
@@ -71,9 +87,16 @@ disagree, the documents win.
 - Blueprint (structure to port): `C:\Users\user\Desktop\Projects\תוסף RECHAREG לPAYPLUS`
   — `app/Domain/Billing/{Ledger,IdempotencyKey}.php`, `Concerns/HasGuardedStatus.php`,
   `Console/Commands/DispatchDuePlansCommand.php`, `Jobs/ChargeJob.php`,
-  `Mail/Support/TemplateRenderer.php`, `lang/{en,he}/*`, `Procfile`.
+  `Mail/Support/TemplateRenderer.php`, `lang/{en,he}/*`, `Procfile`;
+  Shopify app layer: `Http/Controllers/Shopify/OAuthController.php`,
+  `Services/Shopify/{ShopInstaller,ShopifyAdminClient}.php`,
+  `Jobs/Shopify/RegisterShopifyWebhooksJob.php`, `Http/Middleware/VerifyShopifyWebhook.php`,
+  `Services/Shopify/Webhooks/*`, `Services/Products/{ProductUpserter,ProductRefreshService}.php`.
 - Edge-case oracle: `C:\Users\user\Desktop\Projects\פייפלוס חשבונית\app\Modules\PayPlusShopifyInstallments`
-  — `ChargeOrchestrator::recoverStuckRecurringPayment()`, `SignedUrlService` storefront wrapping.
+  — `ChargeOrchestrator::recoverStuckRecurringPayment()`, `SignedUrlService` storefront wrapping,
+  `Services/ShopifyOrderCreator.php` (order shapes incl. inline manual/external sale tx),
+  **`Support/ShopifyOrderAttribution.php` + `extensions/payplus-installments-channel/`**
+  (the working Sales-Channel attribution precedent — port + rename to `mills-subscriptions`).
 - v1 production (working parts to port + the live system during transition):
   `C:\Users\user\Desktop\Projects\Mills IL API\mills-api\mills-api\dist\mills-admin`
   (tag `v1-legacy-stable`) — `PaymeService`, `PaymentMethodUpdateService`, `DogQuizMapper`,

@@ -1,179 +1,178 @@
-# Mills v2 — Rebuild Plan (separate project, PayPlus-Subscriptions architecture)
+# Mills v2 — תוכנית העבודה המלאה / Rebuild Plan
 
-> **תקציר בעברית:** בונים את Mills v2 כפרויקט **נפרד** (ריפו חדש, שירות Railway חדש), על
-> אותו מבנה ואותה חוקיות של פרויקט PayPlus Subscriptions (RECHARGE): ledger לפני כל חיוב,
-> מפתחות idempotency, מכונת מצבים שמורה, scheduler כשירות ייעודי, מיילים ב־strtr,
-> i18n עברית/אנגלית. ה־DB המקומי הוא מקור האמת היחיד — אפס Metaobjects. חוזה ה־Endpoints
-> שהאתר תלוי בו קפוא ונשמר אחד-לאחד. כניסה לאזור האישי ב־OTP (מייל תחילה, SMS בהמשך).
-> המעבר מסתיים בהחלפת כתובת אחת בתבנית שופיפיי, עם דרך חזרה מיידית.
+> **מה בונים, במשפט אחד:** אפליקציית שופיפיי אמיתית (Custom App) בפרויקט נפרד, על הארכיטקטורה
+> של PayPlus Subscriptions, שבה ה־DB שלנו הוא מקור האמת היחיד — עם חיוב חוזר אמין, כניסה ב־OTP,
+> עברית/אנגלית, והזמנות שנכנסות לשופיפיי תחת ה־Channel של האפליקציה.
 
-Inputs: `docs/SYSTEM-MAP.md` (v1 map), the RECHARGE blueprint at
-`Projects\תוסף RECHAREG לPAYPLUS` (implemented: Ledger, IdempotencyKey, HasGuardedStatus,
-DispatchDuePlansCommand, ChargeJob, TemplateRenderer, MailSettings, lang/en+he, Filament
-structure) and the production engine at `Projects\פייפלוס חשבונית` (edge-case oracle:
-stuck-payment recovery, storefront-wrapped portal links).
+Inputs: `docs/SYSTEM-MAP.md` (v1 map + **the frozen HTTP contract §3**), the RECHARGE blueprint
+(`Projects\תוסף RECHAREG לPAYPLUS` — implemented: Ledger, IdempotencyKey, HasGuardedStatus,
+scheduler, OAuth app layer, product sync, email engine, lang/en+he), and the production engine
+(`Projects\פייפלוס חשבונית` — edge-case oracle + the working **Sales Channel extension**).
 
 ---
 
-## 0. Goals / Non-goals
+## 1. החלטות סגורות / Locked decisions
 
-**Goals**
-1. Shopify **custom app** backend, separate project, Hebrew/English.
-2. **Local Postgres = single source of truth.** No metaobjects, no metafield links, no note-JSON.
-3. Keep working v1 parts: quiz→dog flow, subscription-product checkout→recurring subscription,
-   PayMe billing + Hosted-Fields card update, personal-area payload, admin design (tabuzzco).
-4. **Frozen endpoint contract** — the theme keeps calling the exact same paths/payloads
-   (SYSTEM-MAP §3). Cutover = change one base URL in the theme.
-5. Reliable recurring billing: dedicated scheduler service, window-based dispatch with catch-up,
-   retry backoff, full audit, heartbeat.
-6. iCount wall: non-PayMe customers see the card-update requirement; completing it activates them.
-7. Personal-area login via OTP — email (SMTP) first, SMS-ready interface for later.
-8. Clear customer/subscription management in the admin from day one.
+> **בעברית:** כל השאלות הפתוחות נסגרו. אין יותר "נחליט אחר כך" על הדברים האלה.
 
-**Non-goals:** multi-tenancy (single shop — drop RECHARGE's tenant layer), moving products or
-checkout out of Shopify, redesigning the theme's personal-area UI (its JSON contract is kept),
-PayPlus/documents integration.
-
-## 1. Locked decisions
-
-| # | Decision |
-|---|---|
-| D1 | Separate repo + separate Railway environment; v1 stays live and untouched during the build. |
-| D2 | Stack: Laravel 12 + Filament (same as v1/RECHARGE), Postgres, Redis (queues) on Railway. |
-| D3 | Structure: `app/Domain/Billing/*` + `app/Modules/MillsSubscriptions/*` — RECHARGE's module layout minus tenancy (`shop_id` columns dropped; `acrossAllTenants` seam not needed). |
-| D4 | Money core ported from RECHARGE: `Ledger` (pending-before-charge), `IdempotencyKey`, `LedgerStatus`, `HasGuardedStatus`, 4-layer idempotency wall, `[4,24,72]h` retry backoff. |
-| D5 | Gateway boundary: `PayMeGateway` implementing `chargeWithReference($method,$amount,$idempotencyKey,$opts): GatewayResult` — PaymeService internals ported from v1 (they work). |
-| D6 | `payment_methods` table (encrypted buyer_key per customer) replaces v1's BillingLog-mining. One card per customer charges all their subscriptions (the 2026-06 sibling-flip lesson becomes schema). |
-| D7 | API compatibility layer keeps v1's exact status vocabulary (`active/pending/disable`) and `{ok,data|error,message}` envelopes at the edge; internal enums are the guarded machine. |
-| D8 | OTP mints the **same storefront token format** (`<id>.<ts>.<hmac>`, same `STOREFRONT_TOKEN_SECRET`) — so every existing storefront endpoint and the theme keep working unchanged; the Liquid-minted token remains valid during transition. |
-| D9 | Railway topology: 3 services from one repo — `web`, `worker` (queues: charges, mail, sync), `scheduler` (`php artisan schedule:work`). No backgrounded children, no HTTP healthcheck on worker/scheduler. |
-| D10 | Products/variants/checkout/orders stay in Shopify (custom-app Admin API token). Draft-order create/complete kept from v1. |
-| D11 | v1 metaobjects are frozen at cutover, never deleted (rollback safety). |
-
-## 2. Target DB schema (v2)
-
-Core (adapted from RECHARGE, single-tenant):
-
-- **customers** — id, shopify_customer_id (unique, nullable-later), email (unique), phone,
-  first_name, last_name, address fields (address1/2, city, zip, country, province), locale
-  (`he`/`en`), meta json. Owned locally; optionally pushed to Shopify.
-- **dogs** — id, customer_id FK, subscription_id FK nullable, name, sex, age, weight, allergies,
-  activity, body, calories_per_day, birth_date, double_food, avatar, status,
-  subscription_status, **selected_variants json, addons_products json** (the two fields v1's
-  mirror missed), legacy_shopify_gid (import provenance).
-- **subscriptions** — id, customer_id FK, status (guarded: `pending→active→{paused,past_due,cancelled}`,
-  `past_due→{active,cancelled}`; edge maps to v1 strings), frequency_months (1|2),
-  **next_charge_at** (datetime — replaces `charge_cycle` date), original_order_id,
-  draft_order_id, payment_state (`payme` | `needs_card_update`), attempt_count, next_retry_at,
-  legacy_shopify_gid, meta json. **Hot index `(status, next_charge_at)`.**
-- **payment_methods** — id, customer_id FK, gateway (`payme`), buyer_key `encrypted`,
-  masked_card, is_active, captured_at, source (`card_update|order|import`).
-- **payment_ledger** — immutable money truth: subscription_id, customer_id, payment_method_id,
-  **idempotency_key (unique)**, amount, currency, status
-  (`pending→{succeeded,failed}`, `failed→retry_scheduled→{succeeded,failed}`, `succeeded→refunded`),
-  payme_transaction_id, shopify_order_id, draft_order_id, failure_code/message,
-  raw_response_masked json. Import v1 `billing_logs` here with status mapping.
-- **activity_events** — append-only timeline: subscription_id, customer_id, actor
-  (`system|admin:{id}|customer|webhook`), kind, details json, created_at only.
-- **otp_codes** — customer_id, channel (`email`|`sms`), destination, code_hash, expires_at,
-  consumed_at, attempts. + **quiz_dogs** (quiz payload store replacing `dog_quiz` metaobject),
-  **mail_settings**, **app_settings**, framework tables.
-
-IdempotencyKey formats (Mills contexts):
-`recurring:{subscriptionId}:{cycleDate Y-m-d}` · `retry:{ledgerId}:{attempt}` ·
-`manual:{subscriptionId}:{adminId}:{date}`.
-
-## 3. Endpoint compatibility (the frozen contract)
-
-All four v1 surfaces re-implemented over the DB, byte-compatible (SYSTEM-MAP §3 is the spec):
-`/api/*` (+webhooks), legacy `/shopify/subscription/*`+`/shopify/dog/*`+`/order/*`,
-`/storefront/me*` (token auth, same envelopes, same Hebrew error messages, GID-or-numeric ids,
-legacy field aliases), `/storefront/payment-method/*` (PayMe Hosted Fields, session_id auth).
-Numeric IDs: v2 accepts legacy Shopify GIDs/numerics via `legacy_shopify_gid` lookup so existing
-links/tokens keep resolving.
-
-**Parity harness (build in Phase 4):** for N sampled customers, render v2 `GET /storefront/me`
-and diff against v1's stored `shopify_customers.last_me_payload`. Gate: zero meaningful diffs on
-active customers before cutover.
-
-## 4. Billing engine + scheduler (the CRON fix)
-
-- `mills:dispatch-due` every 5 min (scheduler service): select `status=active AND
-  next_charge_at <= now()` (window, not a single minute — **automatic catch-up**), chunked,
-  one `ChargeJob` per subscription (`ShouldBeUnique`, queue `charges`, tries=1).
-- ChargeJob → ChargeOrchestrator: lockForUpdate → `Ledger::hasSucceeded(key)` short-circuit →
-  payment_method precheck (fail closed → `needs_card_update` + event) → `Ledger::open(pending)`
-  → PayMeGateway charge → on success: transition ledger, create+complete draft order in Shopify,
-  advance `next_charge_at` (+frequency months), clear addons, next draft, Timeline event, email;
-  Shopify/mail failures are logged compensations, never unwind the ledger.
-  On failure: backoff `[4,24,72]h` via `next_retry_at`; exhausted → subscription `past_due` +
-  notification. Mine the engine's `recoverStuckRecurringPayment()` for the
-  "gateway succeeded but our write failed" recovery path.
-- Heartbeats from scheduler+worker; Filament Observability page (charge success/fail, queue
-  depth, scheduler freshness) ported from RECHARGE. **No cache-toggle gate** — billing is on
-  when deployed; a `billing.kill_switch` env var is the only (explicit, logged) off switch.
-
-## 5. iCount wall + card update
-
-Imported iCount customers get subscriptions with `payment_state=needs_card_update` (billing
-skips them; `/me` returns `requires_card_update:true` + virtual pricing from imported data —
-same UX as today). Card update flow (ported Hosted Fields) on success: create `payment_methods`
-row → set `payme` on **all** the customer's subscriptions → activate → Timeline. The v1
-sibling-flip bug class disappears by construction (one payment method row per customer).
-
-## 6. OTP login (personal area)
-
-- `POST /storefront/auth/otp/request` `{email}` → 6-digit code, 10 min TTL, hash stored,
-  rate-limited (3/15min per destination), SMTP mail (RECHARGE TemplateRenderer engine).
-- `POST /storefront/auth/otp/verify` `{email, code}` → mints the standard storefront token (D8)
-  + returns customer basics. Theme adds a small login screen; everything downstream unchanged.
-- `SmsChannel` interface stubbed now (provider chosen later); channel per customer.locale.
-- Liquid-minted tokens keep working in parallel until Aviad retires the snippet.
-
-## 7. Admin (Filament)
-
-Port the tabuzzco design layer (theme.css tokens + mills components — already built in v1).
-Resources: Customers (list/detail: dogs, subscriptions, payment method, timeline, OTP status,
-impersonate/preview), Subscriptions (list/detail with guarded status actions, manual charge,
-next-charge edit), PaymentLedger (read-only), Dogs. Pages: Dashboard (stats), Observability,
-Mail settings (per-template editor, strtr placeholders), App settings. All strings `__()`,
-en+he mirrors.
-
-## 8. Import pipeline (one-time, idempotent, re-runnable)
-
-Order: catalog check → `mills:import-customers` (mirror+REST) → `mills:import-subscriptions`
-(metaobjects; live-fetch dogs' `selected_variants`/`addons_products` — the mirror lacks them) →
-`mills:import-legacy-notes` (LegacyNoteParser → subscriptions with `needs_card_update`) →
-`mills:import-billing-history` (billing_logs → payment_ledger; card-update rows → payment_methods)
-→ `mills:import-verify` (counts vs v1, orphan report, /me parity sample). Every importer:
-`--dry-run` default, `--apply`, provenance columns, safe to re-run (upsert by legacy gid).
-
-## 9. Phases & gates
-
-| Phase | Deliverable | Gate to advance |
+| # | החלטה | Decision |
 |---|---|---|
-| **0. Stabilize v1 billing (now, ops-only)** | On `/admin/billing-scheduler`: heartbeat green + "Enable scheduled ticks" ON; verify next 08:00 run charges | Revenue flows during the rebuild |
-| **1. Scaffold** | New repo + Laravel + Filament + module skeleton + CLAUDE.md/ARCHITECTURE.md laws + CI (pint, phpunit) + Railway env (web/worker/scheduler/Postgres/Redis) | App boots on Railway; laws committed |
-| **2. Money core** | Schema §2 + models + guarded machines + Ledger + IdempotencyKey + PayMeGateway + unit tests (double-charge, illegal transition, ledger-before-charge) | Money tests green |
-| **3. Import** | §8 pipeline against production Shopify (read-only) | `import-verify` clean: counts match, 0 orphans |
-| **4. Endpoint parity** | All 4 surfaces on DB + contract tests per SYSTEM-MAP + /me parity harness | Parity harness zero-diff on sample; theme staging works against v2 |
-| **5. Billing engine** | §4 scheduler/worker/orchestrator + card-update flow + observability | Staged dry-run bills a test sub end-to-end (draft→charge→order→advance); retry path proven |
-| **6. OTP + admin** | §6 auth + §7 admin complete | OTP login works from theme staging; admin CRUD complete |
-| **7. i18n + polish** | he/en mirrors, RTL checks, emails | Language switch clean; HE has no missing keys |
-| **8. Cutover** | Re-run import delta → freeze v1 writes (maintenance flag) → final delta → swap theme base URL (+same secrets) → monitor 48h → retire v1 to read-only | Rollback: swap URL back (v1 untouched, metaobjects frozen not deleted) |
+| D1 | פרויקט נפרד, ריפו נפרד, Railway נפרד; v1 חי וללא שינוי עד המעבר | Separate repo + Railway env; v1 untouched during the build |
+| D2 | Laravel 12 + Filament + Postgres + Redis | Same stack as v1/RECHARGE |
+| D3 | מבנה מודול של RECHARGE בלי multi-tenancy | `app/Domain/Billing` + `app/Modules/MillsSubscriptions`, no `shop_id` |
+| D4 | ליבת כסף מ־RECHARGE: ledger לפני חיוב, מפתחות idempotency, מכונת מצבים שמורה, retry \u200F[4,24,72] שעות | Money core ported from RECHARGE |
+| D5 | PayMe מאחורי חוזה gateway אחיד | `PayMeGateway::chargeWithReference(...)`, internals from v1 (they work) |
+| D6 | כרטיס אחד ללקוח בטבלת `payment_methods` (buyer_key מוצפן) | Replaces v1's BillingLog-mining |
+| D7 | חוזה ה־API קפוא — אותם נתיבים, אותם שמות שדות, אותם סטטוסים (`active/pending/disable`) | The theme never notices the swap |
+| D8 | ה־OTP מנפיק את אותו פורמט טוקן של v1 | Existing storefront endpoints work unchanged |
+| D9 | שלושה שירותי Railway: web / worker / scheduler | No backgrounded scheduler children |
+| D10 | **חיבור לשופיפיי כאפליקציה אמיתית** — OAuth + טוקן offline מוצפן + הרחבת Sales Channel | Partner-Dashboard app (custom distribution), like RECHARGE |
+| D11 | Metaobjects של v1 מוקפאים במעבר, לא נמחקים | Rollback safety |
+| D12 | **SMTP מנוהל מהפאנל** — מסך הגדרות + כפתור בדיקת שליחה, סיסמה מוצפנת | Admin-managed mail settings |
+| D13 | **SMS = \u200F019** — ממשק `SmsSender` עכשיו, adapter כשיהיו פרטים | Email (SMTP) first |
+| D14 | **עדכון כתובת נדחף חזרה לשופיפיי** — ה־DB שלנו הבעלים, שופיפיי מקבל עדכון (למשלוחים) | Compensating push, never blocks |
+| D15 | **ביטול מנוי תמיד מיידי** | No end-of-period anywhere |
+| D16 | **מוצרים + מדיה נמשכים ל־cache מקומי** (כולל תמונות) — אף נתיב חם לא קורא לשופיפיי חי | products/product_variants incl. image CDN URLs |
+| D17 | **הזמנות נכנסות תחת ה־Channel של האפליקציה** — הרחבת Sales Channel בשם `mills-subscriptions` + `source_name` תואם | Engine precedent (RECHARGE's source_name alone is NOT enough) |
 
-## 10. Risks & mitigations
+## 2. מה נשאר בשופיפיי / מה עובר אלינו
 
-1. **Hidden theme callers** → Phase 4 runs v2 in shadow (access-log diff on v1 for any path v2
-   doesn't serve). 2. **Import drift** (customers change data during build) → delta import at
-   cutover keyed on provenance. 3. **PayMe charge divergence** → gateway ported verbatim from
-   v1 + kill switch + first cycles monitored per-charge. 4. **Quiz secret exposure** (v1 ships
-   API_SECRET in a data-attribute) → keep contract now; Phase 7 adds a scoped quiz-only token,
-   theme migrates later. 5. **OTP lockout** → Liquid token path stays valid until OTP proven.
+> **בעברית:** הטבלה שחשוב להכיר בעל־פה. העמודה הימנית נעלמת מהעולם אחרי הייבוא.
 
-## 11. Open questions for Aviad
+| נשאר בשופיפיי (דרך האפליקציה) | עובר ל־DB שלנו (מקור אמת יחיד) | נמחק לגמרי |
+|---|---|---|
+| מוצרים, וריאנטים, תמונות (מקור; אצלנו cache) | לקוחות + כתובות (עם דחיפה חזרה) | Metaobjects: `customer_subscriptions`, `dog`, `dog_quiz` |
+| Checkout והזמנות (תחת Channel של האפליקציה) | מנויים, כלבים, טעמים, תוספים | Metafields: `custom.my_dogs`, `custom.customer_subscriptions` |
+| Webhooks (orders, products, uninstall) | אמצעי תשלום (buyer_key מוצפן) | ה־JSON בשדה note של לקוחות iCount (אחרי ייבוא) |
+| טיוטת "ההזמנה הבאה" (תצוגה מקדימה בלבד) | Ledger חיובים, Timeline, OTP, הגדרות מייל | כל מנגנון הסנכרון של v1 (`app/Snapshots`, פקודות Sync) |
 
-1. SMTP provider/credentials for OTP + subscription emails? 2. SMS provider preference (019 /
-   Twilio / other) — for the interface design. 3. Should v2 push address changes back to Shopify
-   customers (for shipping labels) or is local-only fine? 4. Cancel semantics in the personal
-   area: immediate or end-of-period?
+## 3. אבני היסוד הארכיטקטוניות
+
+> **בעברית:** חמשת העקרונות שהופכים את המערכת לאמינה. מפורטים במלואם ב־`ARCHITECTURE.md`.
+
+1. **Ledger לפני חיוב** — שורת `pending` נכתבת לפני כל קריאה ל־PayMe, בתוך טרנזקציה עם נעילה.
+   שורת `succeeded` על אותו מפתח = לעולם לא מחייבים שוב (חומת idempotency ב־4 שכבות).
+2. **מכונות מצבים שמורות** — שינוי סטטוס רק דרך `transitionTo()`; כל מעבר נרשם ב־Timeline.
+   ביטול = מיידי (D15).
+3. **Scheduler אמיתי** — שירות ייעודי, בחירת חיובים בחלון (`next_charge_at <= now`) עם השלמה
+   אוטומטית של פספוסים, retry \u200F[4,24,72] שעות, heartbeat + דף Observability. בלי מתג cache
+   (הלקח מ־v1); כיבוי רק ב־`BILLING_KILL_SWITCH` מפורש.
+4. **אפליקציית שופיפיי אמיתית** — OAuth install → טוקן offline מוצפן; webhooks נרשמים אוטומטית;
+   הזמנות חיוב חוזר נוצרות ב־`orderCreate` עם טרנזקציית sale פנימית (`gateway:'manual',
+   source:'external'` — הכסף כבר עבר ב־PayMe) ו־`source_name = 'mills-subscriptions'` ⇒
+   מופיעות תחת **Channel של האפליקציה**. טיוטה נשמרת רק כתצוגת "ההזמנה הבאה" (חוזה `/me`).
+5. **Cache מוצרים ומדיה** — `products` + `product_variants` עם `image_url` (CDN של שופיפיי),
+   מתעדכן ב־webhooks + ריענון לילי + כפתור ידני. השאלון, הפאנל וה־`/me` קוראים רק מה־cache.
+
+## 4. חומת ה־iCount ועדכון כרטיס
+
+> **בעברית:** לקוח ותיק (iCount) שנכנס לאזור האישי מקבל את דרישת עדכון הכרטיס — בדיוק כמו היום.
+> אחרי עדכון מוצלח: נוצרת שורת `payment_methods`, **כל** המנויים שלו עוברים ל־payme, והוא נכנס
+> כמנוי מלא. באג ה"נשאר תקוע" של v1 נעלם מהמבנה עצמו (כרטיס אחד ללקוח, לא לפי מנוי).
+
+## 5. OTP — כניסה לאזור האישי
+
+> **בעברית:** שלב ראשון מייל (SMTP מהפאנל), שלב שני SMS דרך 019. הטוקן שמונפק זהה לפורמט של
+> היום — האתר לא מרגיש. הטוקן מה־Liquid ממשיך לעבוד במקביל עד שנחליט לכבות.
+
+`POST /storefront/auth/otp/request {email}` → קוד 6 ספרות (hash, \u200F10 דק', rate-limit) →
+`POST /storefront/auth/otp/verify` → טוקן storefront סטנדרטי. ערוץ `sms` (019) מאחורי חוזה
+`SmsSender` — נבנה כשיגיעו פרטי החשבון (D13).
+
+## 6. פאנל הניהול (Filament, עיצוב tabuzzco מ־v1)
+
+> **בעברית:** ניהול ברור מהיום הראשון — לקוחות, מנויים, חיובים, מוצרים, והגדרות מייל.
+
+- **Customers** — רשימה + כרטיס לקוח: כלבים, מנויים, אמצעי תשלום, Timeline, כפתור preview.
+- **Subscriptions** — רשימה + פעולות סטטוס שמורות, "חייב עכשיו", עריכת מועד חיוב הבא.
+- **PaymentLedger** — היסטוריית כסף לקריאה בלבד. **Dogs**, **Products** (עם תמונות מה־cache).
+- **Pages:** Dashboard, Observability (בריאות scheduler/queue/חיובים), **Mail settings**
+  (עורך תבניות + **הגדרות SMTP + בדיקת שליחה** — D12), Shopify connection (סטטוס OAuth,
+  webhooks, כפתור ריענון מוצרים), App settings.
+- הכול `__()` עם מראה he/en מלאה.
+
+## 7. ייבוא (חד-פעמי, idempotent, ניתן להרצה חוזרת)
+
+> **בעברית:** שישה צעדים, כולם `--dry-run` כברירת מחדל, עם דוח אימות בסוף.
+
+catalog-check → import-customers → import-subscriptions (כולל משיכה חיה של הטעמים
+`selected_variants`/`addons_products` שחסרים במראה של v1!) → import-legacy-notes
+(iCount → מנויים במצב `needs_card_update`) → import-billing-history (billing_logs →
+payment_ledger; שורות עדכון-כרטיס → payment_methods) → **import-verify** (השוואת ספירות,
+דוח יתומים, דגימת `/me` מול `last_me_payload` של v1).
+
+## 8. שלבי הביצוע / Phases
+
+> **בעברית:** כל שלב עם רשימת מסירה ושער מעבר. לא מדלגים על שערים.
+
+### Phase 0 — ייצוב v1 (עכשיו, בלי קוד)
+- [ ] `/admin/billing-scheduler`: heartbeat ירוק? "Enable scheduled ticks" דלוק?
+- [ ] הרצת "Run billing now" ובדיקת התוצאות ב־billing_logs
+- **שער:** חיובים זורמים ב־v1 בזמן שבונים את v2.
+
+### Phase 1 — שלד + אפליקציית שופיפיי
+- [ ] Laravel + Filament + מבנה המודול + CI (pint, phpunit)
+- [ ] Railway: web / worker / scheduler + Postgres + Redis
+- [ ] **יצירת האפליקציה ב־Partner Dashboard** (custom distribution) — צעד ידני מודרך של אביעד
+- [ ] OAuth install/callback → טוקן מוצפן ב־`shopify_connection`
+- [ ] רישום webhooks אוטומטי + middleware אימות fail-closed
+- [ ] **פריסת הרחבת ה־Sales Channel** (`mills-subscriptions`) ב־`shopify app deploy`
+- **שער:** האפליקציה מותקנת, webhooks נרשמו, והזמנת בדיקה מופיעה תחת ה־Channel שלה.
+
+### Phase 2 — ליבת הכסף
+- [ ] סכימה מלאה + מודלים + מכונות מצבים + Ledger + IdempotencyKey + PayMeGateway
+- [ ] בדיקות: חיוב כפול נחסם, מעבר לא-חוקי זורק, ledger-לפני-gateway
+- **שער:** בדיקות הכסף ירוקות.
+
+### Phase 3 — Cache מוצרים + ייבוא
+- [ ] ProductSyncService: backfill, webhooks, ריענון לילי, כפתור ידני; תמונות נשמרות
+- [ ] צינור הייבוא המלא (§7) מול שופיפיי production (קריאה בלבד)
+- **שער:** `import-verify` נקי — ספירות תואמות, אפס יתומים.
+
+### Phase 4 — זהות Endpoints
+- [ ] כל 4 המשטחים (api / legacy / storefront / payme-web) מוגשים מה־DB
+- [ ] בדיקות חוזה לפי SYSTEM-MAP §3 + harness השוואת `/me` מול v1
+- **שער:** אפס הבדלים בדגימה; תבנית staging עובדת מול v2.
+
+### Phase 5 — מנוע החיוב
+- [ ] dispatch-due כל 5 דק' + ChargeJob + Orchestrator + backoff
+- [ ] **הזמנות ב־`orderCreate` + טרנזקציה פנימית + שיוך Channel** (D17); טיוטת preview לסייקל הבא
+- [ ] עדכון כרטיס → payment_methods → הפעלת כל מנויי הלקוח
+- [ ] Observability + heartbeats
+- **שער:** מנוי בדיקה עובר סייקל מלא (חיוב → הזמנה תחת ה־Channel → קידום מועד → טיוטה חדשה); מסלול retry מוכח.
+
+### Phase 6 — OTP + פאנל
+- [ ] OTP מייל (SMTP מהפאנל — D12) + מסך התחברות בתבנית
+- [ ] ממשק `SmsSender` \u200F(019 — D13)
+- [ ] כל משאבי הפאנל (§6) כולל Mail settings + test-send
+- [ ] דחיפת כתובת לשופיפיי (D14)
+- [ ] ביטול מיידי בכל המסלולים (D15)
+- **שער:** התחברות OTP מהתבנית עובדת; ניהול מלא בפאנל.
+
+### Phase 7 — i18n + ליטוש
+- [ ] מראה he/en מלאה, בדיקות RTL, תבניות מייל בעברית
+- **שער:** אפס מפתחות חסרים ב־HE.
+
+### Phase 8 — מעבר (Cutover)
+- [ ] ייבוא דלתא → הקפאת כתיבות v1 → דלתא אחרונה → החלפת `data-mills-api-base` בתבנית
+  (אותם secrets) → ניטור 48 שעות → v1 לקריאה בלבד
+- **חזרה לאחור:** החלפת ה־URL חזרה. v1 לא נגוע; Metaobjects מוקפאים ולא נמחקים (D11).
+
+## 9. סיכונים ומענים
+
+1. **קוראי-endpoint נסתרים** → הרצת צל + diff על access-log של v1.
+2. **סחף נתונים בזמן הבנייה** → ייבוא דלתא לפי provenance במעבר.
+3. **סטיית חיוב PayMe** → gateway מועתק אחד-לאחד + kill switch + ניטור פר-חיוב בסייקלים הראשונים.
+4. **חשיפת API_SECRET בשאלון (ירושה מ־v1)** → נשמר בינתיים לחוזה; Phase 7 מוסיף טוקן ייעודי
+   לשאלון והתבנית תעבור בהמשך.
+5. **נעילת OTP** → מסלול הטוקן מה־Liquid נשאר תקף עד ש־OTP מוכח.
+6. **הרחבת ה־Channel דורשת אפליקציית Partner Dashboard** → צעד ידני חד-פעמי של אביעד, עם
+   הוראות מודרכות (ARCHITECTURE §10).
+
+## 10. צעדים ידניים של אביעד (מודרכים, חד-פעמיים)
+
+1. יצירת האפליקציה ב־Partner Dashboard → \u200F`SHOPIFY_API_KEY/SECRET`.
+2. התקנה דרך `/shopify/install`.
+3. אישור `shopify app deploy` להרחבת ה־Channel.
+4. הזנת פרטי SMTP בפאנל (Mail settings → test-send).
+5. פרטי 019 כשמתחילים SMS.
