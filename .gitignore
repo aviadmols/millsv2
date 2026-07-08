@@ -1,0 +1,13 @@
+/node_modules
+/vendor
+/.env
+/.env.*.local
+/public/build
+/public/hot
+/storage/*.key
+/.phpunit.cache
+npm-debug.log
+yarn-error.log
+/.idea
+/.vscode
+.DS_Store
