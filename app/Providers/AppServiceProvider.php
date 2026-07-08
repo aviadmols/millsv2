@@ -7,6 +7,7 @@ use App\Modules\MillsSubscriptions\Services\PayMe\PaymeClient;
 use App\Modules\MillsSubscriptions\Services\PayMe\PayMeGateway;
 use App\Modules\MillsSubscriptions\Services\Sms\Sms019Sender;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
+use BezhanSalleh\LanguageSwitch\LanguageSwitch;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -29,5 +30,12 @@ class AppServiceProvider extends ServiceProvider
         if ($this->app->isProduction() || str_starts_with((string) config('app.url'), 'https://')) {
             URL::forceScheme('https');
         }
+
+        // Hebrew / English switcher in the admin topbar (D5, ARCHITECTURE.md §6).
+        LanguageSwitch::configureUsing(function (LanguageSwitch $switch): void {
+            $switch->locales(['he', 'en'])
+                ->labels(['he' => 'עברית', 'en' => 'English'])
+                ->flags(['he' => '🇮🇱', 'en' => '🇬🇧']);
+        });
     }
 }

@@ -1,0 +1,53 @@
+<?php
+
+namespace App\Filament\Resources\Dogs\Schemas;
+
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Schema;
+
+class DogForm
+{
+    public static function configure(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                Select::make('customer_id')
+                    ->relationship('customer', 'id')
+                    ->required(),
+                Select::make('subscription_id')
+                    ->relationship('subscription', 'id'),
+                TextInput::make('name'),
+                TextInput::make('sex')
+                    ->numeric(),
+                TextInput::make('age')
+                    ->numeric(),
+                TextInput::make('weight')
+                    ->numeric(),
+                Textarea::make('allergies')
+                    ->columnSpanFull(),
+                TextInput::make('activity')
+                    ->numeric(),
+                TextInput::make('body')
+                    ->numeric(),
+                TextInput::make('calories_per_day')
+                    ->numeric(),
+                DatePicker::make('birth_date'),
+                Toggle::make('double_food')
+                    ->required(),
+                TextInput::make('avatar'),
+                TextInput::make('status')
+                    ->required()
+                    ->default('active'),
+                TextInput::make('subscription_status'),
+                Textarea::make('selected_variants')
+                    ->columnSpanFull(),
+                Textarea::make('addons_products')
+                    ->columnSpanFull(),
+                TextInput::make('legacy_shopify_gid'),
+            ]);
+    }
+}
