@@ -1,0 +1,17 @@
+# Railway / Nixpacks — Laravel 13 + Vite build.
+# PHP version MUST match composer.json (^8.3) — pin 8.4 so Nixpacks installs
+# php84 and not an older default that fails to parse framework files.
+# See: https://nixpacks.com/docs/providers/php
+
+[variables]
+NIXPACKS_PHP_VERSION = "8.4"
+NIXPACKS_NODE_VERSION = "22"
+
+[phases.setup]
+aptPkgs = ["libicu-dev", "libzip-dev"]
+
+[phases.build]
+cmds = ["npm install && npm run build"]
+
+[start]
+cmd = "sh bin/railway-start.sh"
