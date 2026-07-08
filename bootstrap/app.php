@@ -27,6 +27,9 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Railway terminates TLS at the edge and forwards HTTP + X-Forwarded-Proto.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'storefront.token' => VerifyStorefrontToken::class,
             'api.secret' => ValidateApiSecret::class,
