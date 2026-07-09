@@ -32,10 +32,10 @@ class AppServiceProvider extends ServiceProvider
         }
 
         // Hebrew / English switcher in the admin topbar (D5, ARCHITECTURE.md §6).
+        // Note: the package's flags() expects image URLs, not emoji — use labels.
         LanguageSwitch::configureUsing(function (LanguageSwitch $switch): void {
             $switch->locales(['he', 'en'])
-                ->labels(['he' => 'עברית', 'en' => 'English'])
-                ->flags(['he' => '🇮🇱', 'en' => '🇬🇧']);
+                ->labels(['he' => 'עברית', 'en' => 'English']);
         });
     }
 }
