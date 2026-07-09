@@ -5,7 +5,9 @@ namespace App\Filament\Resources\Subscriptions;
 use App\Filament\Resources\Subscriptions\Pages\CreateSubscription;
 use App\Filament\Resources\Subscriptions\Pages\EditSubscription;
 use App\Filament\Resources\Subscriptions\Pages\ListSubscriptions;
+use App\Filament\Resources\Subscriptions\Pages\ViewSubscription;
 use App\Filament\Resources\Subscriptions\Schemas\SubscriptionForm;
+use App\Filament\Resources\Subscriptions\Schemas\SubscriptionInfolist;
 use App\Filament\Resources\Subscriptions\Tables\SubscriptionsTable;
 use App\Models\Subscription;
 use BackedEnum;
@@ -20,9 +22,19 @@ class SubscriptionResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
+    public static function getNavigationLabel(): string
+    {
+        return __('subscriptions.title');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return SubscriptionForm::configure($schema);
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return SubscriptionInfolist::configure($schema);
     }
 
     public static function table(Table $table): Table
@@ -42,6 +54,7 @@ class SubscriptionResource extends Resource
         return [
             'index' => ListSubscriptions::route('/'),
             'create' => CreateSubscription::route('/create'),
+            'view' => ViewSubscription::route('/{record}'),
             'edit' => EditSubscription::route('/{record}/edit'),
         ];
     }

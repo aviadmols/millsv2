@@ -2,9 +2,12 @@
 
 namespace App\Filament\Resources\Subscriptions\Tables;
 
+use App\Modules\MillsSubscriptions\Enums\PaymentState;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -14,45 +17,60 @@ class SubscriptionsTable
     {
         return $table
             ->columns([
-                TextColumn::make('customer.id')
-                    ->searchable(),
+                TextColumn::make('id')
+                    ->label('#')
+                    ->sortable(),
+
+                TextColumn::make('customer.full_name')
+                    ->label(__('subscriptions.customer'))
+                    ->getStateUsing(fn ($record) => $record->customer?->fullName() ?? '—')
+                    ->description(fn ($record) => $record->customer?->email)
+                    ->searchable(query: fn ($query, string $search) => $query->whereHas(
+                        'customer',
+                        fn ($q) => $q->where('email', 'like', "%{$search}%")
+                            ->orWhere('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                    ))
+                    ->weight('bold'),
+
                 TextColumn::make('status')
+                    ->label(__('subscriptions.status'))
                     ->badge()
-                    ->searchable(),
+                    ->formatStateUsing(fn (SubscriptionStatus $state) => __('subscriptions.status_'.$state->value))
+                    ->color(fn (SubscriptionStatus $state) => match ($state) {
+                        SubscriptionStatus::ACTIVE => 'success',
+                        SubscriptionStatus::PENDING, SubscriptionStatus::PAUSED => 'warning',
+                        SubscriptionStatus::PAST_DUE => 'danger',
+                        SubscriptionStatus::CANCELLED => 'gray',
+                    }),
+
                 TextColumn::make('payment_state')
+                    ->label(__('subscriptions.payment'))
                     ->badge()
-                    ->searchable(),
+                    ->formatStateUsing(fn (PaymentState $state) => __('subscriptions.pay_'.$state->value))
+                    ->color(fn (PaymentState $state) => $state === PaymentState::PAYME ? 'success' : 'warning'),
+
                 TextColumn::make('frequency_months')
-                    ->numeric()
-                    ->sortable(),
+                    ->label(__('subscriptions.frequency'))
+                    ->formatStateUsing(fn (int $state) => $state === 2 ? __('subscriptions.every_2_months') : __('subscriptions.monthly')),
+
                 TextColumn::make('next_charge_at')
-                    ->dateTime()
+                    ->label(__('subscriptions.next_charge'))
+                    ->dateTime('Y-m-d')
                     ->sortable(),
-                TextColumn::make('original_order_id')
-                    ->searchable(),
-                TextColumn::make('draft_order_id')
-                    ->searchable(),
-                TextColumn::make('attempt_count')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('next_retry_at')
-                    ->dateTime()
-                    ->sortable(),
-                TextColumn::make('legacy_shopify_gid')
-                    ->searchable(),
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('dogs_count')
+                    ->label(__('subscriptions.dogs'))
+                    ->counts('dogs')
+                    ->badge()
+                    ->color('gray'),
             ])
+            ->defaultSort('id', 'desc')
             ->filters([
                 //
             ])
             ->recordActions([
+                ViewAction::make(),
                 EditAction::make(),
             ])
             ->toolbarActions([
