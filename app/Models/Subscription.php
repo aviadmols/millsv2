@@ -63,6 +63,20 @@ class Subscription extends Model
         return $this->customer_id;
     }
 
+    /**
+     * Line items captured for the order this subscription creates. Populated when
+     * v2 builds the Shopify order (stored under meta.line_items); empty for legacy
+     * imports that never carried line-item data.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getLineItemsAttribute(): array
+    {
+        $items = $this->meta['line_items'] ?? null;
+
+        return is_array($items) ? array_values($items) : [];
+    }
+
     // --- Relationships ---
     /** @return BelongsTo<Customer, $this> */
     public function customer(): BelongsTo

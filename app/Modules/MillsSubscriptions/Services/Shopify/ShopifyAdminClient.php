@@ -32,7 +32,7 @@ class ShopifyAdminClient
      */
     public function graphql(string $query, array $variables = []): array
     {
-        return $this->http()->post('/graphql.json', [
+        return $this->http()->post($this->baseUrl().'/graphql.json', [
             'query' => $query,
             'variables' => $variables,
         ])->json() ?? [];
@@ -44,7 +44,7 @@ class ShopifyAdminClient
      */
     public function restGet(string $path, array $query = []): array
     {
-        return $this->http()->get(ltrim($path, '/'), $query)->json() ?? [];
+        return $this->http()->get($this->baseUrl().'/'.ltrim($path, '/'), $query)->json() ?? [];
     }
 
     /**
@@ -53,13 +53,14 @@ class ShopifyAdminClient
      */
     public function restPost(string $path, array $body): array
     {
-        return $this->http()->post(ltrim($path, '/'), $body)->json() ?? [];
+        return $this->http()->post($this->baseUrl().'/'.ltrim($path, '/'), $body)->json() ?? [];
     }
 
     private function http(): PendingRequest
     {
-        return Http::baseUrl($this->baseUrl())
-            ->withHeaders([
+        // Full URLs are built per-call (baseUrl() + path) — a leading-slash path
+        // with Http::baseUrl() would resolve against the host and drop /admin/api.
+        return Http::withHeaders([
                 'X-Shopify-Access-Token' => (string) ($this->connection?->access_token ?? ''),
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
