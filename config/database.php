@@ -84,6 +84,19 @@ return [
             ]) : [],
         ],
 
+        // Read-only connection to the v1 (legacy) Postgres for the one-time
+        // import (Phase 3). Set V1_DB_URL to v1's Postgres — internal on Railway
+        // (postgres.railway.internal) or the public proxy when running locally.
+        'v1' => [
+            'driver' => 'pgsql',
+            'url' => env('V1_DB_URL'),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('V1_DB_SSLMODE', 'prefer'),
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),
