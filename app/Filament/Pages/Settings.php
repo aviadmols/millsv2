@@ -4,6 +4,8 @@ namespace App\Filament\Pages;
 
 use App\Models\AppSetting;
 use App\Models\MailSetting;
+use App\Models\ShopifyConnection;
+use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -48,8 +50,12 @@ class Settings extends Page implements HasForms
     public function mount(): void
     {
         $mail = MailSetting::current();
+        $conn = ShopifyConnection::current();
 
         $this->form->fill([
+            'shopify_shop_domain' => $conn?->shop_domain ?: config('shopify.shop_domain'),
+            'shopify_installed_at' => $conn?->installed_at?->toDayDateTimeString() ?: '—',
+
             'use_custom_smtp' => (bool) $mail->use_custom_smtp,
             'smtp_host' => $mail->smtp_host,
             'smtp_port' => $mail->smtp_port,
@@ -74,6 +80,14 @@ class Settings extends Page implements HasForms
         return $schema
             ->statePath('data')
             ->components([
+                Section::make(__('settings.shopify'))
+                    ->description(__('settings.shopify_help'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('shopify_shop_domain')->label(__('settings.shop_domain'))->disabled()->dehydrated(false),
+                        TextInput::make('shopify_installed_at')->label(__('settings.installed_at'))->disabled()->dehydrated(false),
+                    ]),
+
                 Section::make(__('settings.smtp'))
                     ->description(__('settings.smtp_help'))
                     ->columns(2)
@@ -135,6 +149,33 @@ class Settings extends Page implements HasForms
     {
         return [
             Action::make('save')->label(__('settings.save'))->submit('save'),
+            Action::make('connectShopify')
+                ->label(__('settings.connect_shopify'))
+                ->icon(Heroicon::OutlinedLink)
+                ->color('primary')
+                ->url(route('shopify.install', ['shop' => config('shopify.shop_domain')]))
+                ->openUrlInNewTab(),
+            Action::make('testShopify')
+                ->label(__('settings.test_shopify'))
+                ->icon(Heroicon::OutlinedSignal)
+                ->color('gray')
+                ->action(function (): void {
+                    $client = app(ShopifyAdminClient::class);
+                    if (! $client->isConnected()) {
+                        Notification::make()->title(__('settings.shopify_not_connected'))->warning()->persistent()->send();
+
+                        return;
+                    }
+
+                    $shop = $client->restGet('shop.json');
+                    $domain = $shop['shop']['myshopify_domain'] ?? null;
+
+                    if ($domain !== null) {
+                        Notification::make()->title(__('settings.shopify_ok', ['shop' => $domain]))->success()->send();
+                    } else {
+                        Notification::make()->title(__('settings.shopify_invalid'))->danger()->persistent()->send();
+                    }
+                }),
             Action::make('testEmail')
                 ->label(__('settings.test_email'))
                 ->icon(Heroicon::OutlinedEnvelope)

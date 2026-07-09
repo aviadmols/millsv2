@@ -23,4 +23,14 @@ return [
     'test_email_body' => 'This is a test email from the system settings. If you received it, SMTP works.',
     'test_email_sent' => 'Test email sent to :email',
     'test_email_failed' => 'Test email failed',
+
+    'shopify' => 'Shopify connection',
+    'shopify_help' => 'Connect the app to the store. After changing scopes/settings in the Partner Dashboard you must reconnect to get a fresh token. Note: logging into this admin panel does NOT connect Shopify — use the button below.',
+    'shop_domain' => 'Store domain',
+    'installed_at' => 'Connected at',
+    'connect_shopify' => 'Connect / Reconnect Shopify',
+    'test_shopify' => 'Test Shopify connection',
+    'shopify_ok' => 'Shopify connection is valid ✓ (:shop)',
+    'shopify_invalid' => 'Token is not valid — please reconnect via the "Connect / Reconnect Shopify" button',
+    'shopify_not_connected' => 'App is not connected to Shopify — click "Connect / Reconnect Shopify"',
 ];
