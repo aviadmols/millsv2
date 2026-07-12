@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\LogApiRequest;
 use App\Http\Middleware\ValidateApiSecret;
 use App\Http\Middleware\VerifyShopifyWebhook;
 use App\Http\Middleware\VerifyStorefrontToken;
@@ -23,7 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->group(base_path('routes/storefront.php'));
 
             // Shopify app surface — OAuth + webhooks (no web session / no CSRF).
-            Route::group([], base_path('routes/shopify.php'));
+            Route::middleware(LogApiRequest::class)->group(base_path('routes/shopify.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -35,6 +36,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'api.secret' => ValidateApiSecret::class,
             'shopify.webhook' => VerifyShopifyWebhook::class,
         ]);
+
+        // Every /api/* and /storefront/* request lands in system_logs (clear,
+        // simple operation trail). Bodies are never logged — only the outcome.
+        $middleware->appendToGroup('api', LogApiRequest::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

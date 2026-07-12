@@ -16,3 +16,10 @@ Schedule::command('mills:dispatch-due')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->onOneServer();
+
+// Log retention — delete system_logs / cron_runs older than
+// config('mills.logging.retention_days') (default 60 days).
+Schedule::command('logs:prune')
+    ->dailyAt('03:20')
+    ->withoutOverlapping()
+    ->onOneServer();
