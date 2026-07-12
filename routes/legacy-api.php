@@ -19,10 +19,10 @@ use Illuminate\Support\Facades\Route;
  */
 
 // Same as /api: a path id may be numeric or a full Shopify GID (which has slashes).
-const LEGACY_ID_PATTERN = '[0-9]+|gid:\/\/shopify\/[A-Za-z]+\/[0-9]+';
+$idPattern = '[0-9]+|gid:\/\/shopify\/[A-Za-z]+\/[0-9]+';
 
 Route::middleware('api.secret')
-    ->where(['id' => LEGACY_ID_PATTERN, 'customerId' => LEGACY_ID_PATTERN, 'draftOrderId' => LEGACY_ID_PATTERN])
+    ->where(['id' => $idPattern, 'customerId' => $idPattern, 'draftOrderId' => $idPattern])
     ->group(function () {
 
     Route::prefix('shopify/subscription')->group(function () {

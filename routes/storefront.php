@@ -28,11 +28,11 @@ Route::post('auth/otp/verify', [OtpAuthController::class, 'verify'])
 // The id the theme sends back is whatever /me gave it — which for imported records
 // is a Shopify GID (gid://shopify/Metaobject/123). GIDs contain slashes, so the
 // path params must accept them as well as plain numeric ids.
-const STOREFRONT_ID_PATTERN = '[0-9]+|gid:\/\/shopify\/[A-Za-z]+\/[0-9]+';
+$idPattern = '[0-9]+|gid:\/\/shopify\/[A-Za-z]+\/[0-9]+';
 
 // Token-gated personal area
 Route::middleware(['storefront.token', 'throttle:60,1'])
-    ->where(['id' => STOREFRONT_ID_PATTERN])
+    ->where(['id' => $idPattern])
     ->group(function () {
     Route::get('me', [StorefrontMeController::class, 'show'])->name('me.show');
 

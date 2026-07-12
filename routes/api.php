@@ -29,11 +29,11 @@ Route::middleware('shopify.webhook')->group(function () {
  * /me straight into the URL. The pattern ends in digits, so a following segment
  * (…/products) still matches unambiguously.
  */
-const ID_PATTERN = '[0-9]+|gid:\/\/shopify\/[A-Za-z]+\/[0-9]+';
+$idPattern = '[0-9]+|gid:\/\/shopify\/[A-Za-z]+\/[0-9]+';
 
 // --- Machine-to-machine surface (API secret) ---
 Route::middleware('api.secret')
-    ->where(['id' => ID_PATTERN, 'customerId' => ID_PATTERN, 'draftOrderId' => ID_PATTERN])
+    ->where(['id' => $idPattern, 'customerId' => $idPattern, 'draftOrderId' => $idPattern])
     ->group(function () {
     Route::get('ping', fn () => response()->json(['ok' => true, 'service' => 'mills-v2']))->name('api.ping');
 
