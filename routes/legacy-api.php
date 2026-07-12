@@ -18,7 +18,12 @@ use Illuminate\Support\Facades\Route;
  *   - Dog routes use snake_case verbs (change_subscription_variant, …).
  */
 
-Route::middleware('api.secret')->group(function () {
+// Same as /api: a path id may be numeric or a full Shopify GID (which has slashes).
+const LEGACY_ID_PATTERN = '[0-9]+|gid:\/\/shopify\/[A-Za-z]+\/[0-9]+';
+
+Route::middleware('api.secret')
+    ->where(['id' => LEGACY_ID_PATTERN, 'customerId' => LEGACY_ID_PATTERN, 'draftOrderId' => LEGACY_ID_PATTERN])
+    ->group(function () {
 
     Route::prefix('shopify/subscription')->group(function () {
         Route::get('active/charge-cycle-today', [SubscriptionApiController::class, 'dueToday']);

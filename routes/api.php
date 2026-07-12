@@ -22,8 +22,19 @@ Route::middleware('shopify.webhook')->group(function () {
     Route::post('customers/webhook/deleted', [CustomerWebhookController::class, 'deleted']);
 });
 
+/*
+ * Ids in the PATH may be the numeric id OR a full Shopify GID. A GID contains
+ * slashes (gid://shopify/Metaobject/123), which Laravel would otherwise refuse to
+ * match into a single {id} segment — and the theme does put the id it got from
+ * /me straight into the URL. The pattern ends in digits, so a following segment
+ * (…/products) still matches unambiguously.
+ */
+const ID_PATTERN = '[0-9]+|gid:\/\/shopify\/[A-Za-z]+\/[0-9]+';
+
 // --- Machine-to-machine surface (API secret) ---
-Route::middleware('api.secret')->group(function () {
+Route::middleware('api.secret')
+    ->where(['id' => ID_PATTERN, 'customerId' => ID_PATTERN, 'draftOrderId' => ID_PATTERN])
+    ->group(function () {
     Route::get('ping', fn () => response()->json(['ok' => true, 'service' => 'mills-v2']))->name('api.ping');
 
     Route::prefix('subscriptions')->group(function () {
