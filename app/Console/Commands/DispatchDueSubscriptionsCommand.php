@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Domain\Billing\IdempotencyKey;
+use App\Http\Controllers\Api\CronApiController;
 use App\Jobs\ChargeSubscriptionJob;
 use App\Models\Subscription;
+use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use Illuminate\Console\Command;
@@ -25,8 +27,12 @@ class DispatchDueSubscriptionsCommand extends Command
 
     public function handle(): int
     {
-        if (config('billing.kill_switch')) {
-            $this->warn('BILLING_KILL_SWITCH is on — no charges dispatched.');
+        // The only ways billing can be off — and both are LOUD (v1's fatal flaw was
+        // a cache flag that silently defaulted to OFF).
+        if (! CronApiController::isEnabled()) {
+            $reason = config('billing.kill_switch') ? 'BILLING_KILL_SWITCH' : 'billing_enabled=0';
+            $this->warn("Billing is disabled ({$reason}) — no charges dispatched.");
+            SystemLog::warning('cron', 'billing dispatch skipped — billing is disabled', ['reason' => $reason]);
             Cache::forever('billing.dispatch.last_run', now());
 
             return self::SUCCESS;
@@ -61,6 +67,11 @@ class DispatchDueSubscriptionsCommand extends Command
 
         Cache::forever('billing.dispatch.last_run', now());
         $this->info("Dispatched {$dispatched} charge job(s).");
+
+        SystemLog::info('cron', "billing dispatch ran — {$dispatched} charge(s) queued", [
+            'dispatched' => $dispatched,
+            'cutoff' => $cutoff->toIso8601String(),
+        ]);
 
         return self::SUCCESS;
     }

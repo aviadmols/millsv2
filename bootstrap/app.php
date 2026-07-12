@@ -25,6 +25,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // Shopify app surface — OAuth + webhooks (no web session / no CSRF).
             Route::middleware(LogApiRequest::class)->group(base_path('routes/shopify.php'));
+
+            // Legacy NestJS-compat aliases at ROOT (/shopify/*, /order/*) — the exact
+            // paths the existing Shopify theme already calls (SYSTEM-MAP §3.2).
+            Route::middleware('api')->group(base_path('routes/legacy-api.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
