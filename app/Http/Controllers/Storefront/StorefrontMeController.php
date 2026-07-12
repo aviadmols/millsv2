@@ -2,43 +2,23 @@
 
 namespace App\Http\Controllers\Storefront;
 
-use App\Http\Controllers\Controller;
-use App\Http\Middleware\VerifyStorefrontToken;
-use App\Models\Customer;
+use App\Modules\MillsSubscriptions\Support\StorefrontPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * GET /storefront/me — the personal-area dashboard.
+ * GET /storefront/me — the personal-area dashboard (SYSTEM-MAP §3.3).
  *
- * PHASE-1 PLACEHOLDER: returns the authenticated customer envelope only. The full
- * frozen payload (subscriptions[], dogs[], subscription_products, flags) is built
- * in Phase 4 (endpoint parity) against the DB read model. The envelope shape
- * ({ok, data:{customer, subscriptions, dogs, flags}}) already matches SYSTEM-MAP
- * §3.3 so the theme contract is stable.
+ * Returns the frozen payload the Shopify theme already parses:
+ * {ok, data:{customer, subscriptions[{…, dogs, subscription_products}], dogs[], flags{}}}
+ * built entirely from the local DB (the v2 source of truth — no live Shopify read).
  */
-class StorefrontMeController extends Controller
+class StorefrontMeController extends AbstractStorefrontController
 {
     public function show(Request $request): JsonResponse
     {
-        /** @var Customer $customer */
-        $customer = $request->attributes->get(VerifyStorefrontToken::REQUEST_ATTR_CUSTOMER);
+        $customer = $this->requireCustomer($request);
 
-        return response()->json([
-            'ok' => true,
-            'data' => [
-                'customer' => [
-                    'id' => $customer->id,
-                    'numeric_id' => $customer->shopify_customer_id,
-                    'email' => $customer->email,
-                    'display_name' => $customer->fullName(),
-                ],
-                'subscriptions' => [], // TODO Phase 4: full frozen payload
-                'dogs' => [],
-                'flags' => [
-                    'is_empty' => $customer->subscriptions()->count() === 0,
-                ],
-            ],
-        ]);
+        return $this->ok(StorefrontPresenter::me($customer));
     }
 }

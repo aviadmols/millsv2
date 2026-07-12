@@ -59,6 +59,31 @@ class PaymeClient
         return $this->post('/generate-sale', $request);
     }
 
+    /**
+     * Open a PayMe hosted sale whose purpose is to CAPTURE a buyer_key (the card
+     * update flow). No buyer_key is sent — the shopper enters the card on PayMe's
+     * page; afterwards getBuyerKey($payme_sale_id) returns the reusable key.
+     *
+     * @param  array{price?: int|float, productName?: string, callbackUrl?: string, language?: string}  $payload
+     * @return array<string, mixed>
+     */
+    public function createBuyerCaptureSale(array $payload): array
+    {
+        $request = array_filter([
+            'seller_payme_id' => $this->sellerId,
+            'sale_price' => $payload['price'] ?? 100,     // agorot — verification charge
+            'currency' => 'ILS',
+            'product_name' => $payload['productName'] ?? 'עדכון אמצעי תשלום',
+            'installments' => '1',
+            'sale_callback_url' => $payload['callbackUrl'] ?? null,
+            'sale_return_url' => $payload['callbackUrl'] ?? null,
+            'capture_buyer' => 1,                          // ⇒ buyer_key becomes retrievable
+            'language' => $payload['language'] ?? 'he',
+        ], fn ($v) => $v !== null);
+
+        return $this->post('/generate-sale', $request);
+    }
+
     /** @return array<string, mixed> */
     public function getTransaction(string $paymentId): array
     {

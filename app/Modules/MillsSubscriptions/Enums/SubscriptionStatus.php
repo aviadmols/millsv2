@@ -8,10 +8,14 @@ namespace App\Modules\MillsSubscriptions\Enums;
  * strings (`active|pending|disable`) so the frozen contract is preserved.
  *
  *   pending   → active, cancelled
- *   active    → paused, past_due, cancelled
+ *   active    → paused, past_due, pending, cancelled
  *   paused    → active, cancelled
  *   past_due  → active, cancelled
  *   cancelled → (terminal)
+ *
+ * active → pending exists because a subscription that loses its last dog has
+ * nothing to bill: v1 drops it back to `pending`, and the frozen contract keeps
+ * that rule (StorefrontSubscriptionController::removeDog).
  *
  * Cancellation is ALWAYS immediate (no end-of-period mode anywhere).
  */
@@ -35,7 +39,7 @@ enum SubscriptionStatus: string
     {
         return [
             self::PENDING->value => [self::ACTIVE, self::CANCELLED],
-            self::ACTIVE->value => [self::PAUSED, self::PAST_DUE, self::CANCELLED],
+            self::ACTIVE->value => [self::PAUSED, self::PAST_DUE, self::PENDING, self::CANCELLED],
             self::PAUSED->value => [self::ACTIVE, self::CANCELLED],
             self::PAST_DUE->value => [self::ACTIVE, self::CANCELLED],
             self::CANCELLED->value => [],
