@@ -51,4 +51,7 @@ return [
     'ctx_v1_import' => 'Imported (legacy)',
     'date' => 'Date',
     'transaction' => 'Transaction',
+
+    'addons' => 'Add-ons',
+    'products_help' => 'The products billed each cycle. The list is synced from the store (Products → "Sync from Shopify").',
 ];
