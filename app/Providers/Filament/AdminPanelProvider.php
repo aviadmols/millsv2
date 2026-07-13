@@ -30,8 +30,23 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->brandName('Mills Subscriptions')
+            // Served from our own public/ rather than the theme's CDN: the admin must not
+            // go blank because someone re-uploads the theme.
+            ->brandLogo(asset('images/mills-logo.svg'))
+            ->brandLogoHeight('1.75rem')
+            ->favicon(asset('images/mills-logo.svg'))
+            /*
+             * Shopify Admin (Polaris) palette, so the app does not look like a stranger once
+             * it is embedded inside the Shopify admin.
+             */
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::hex('#008060'),   // Polaris green — primary actions
+                'success' => Color::hex('#008060'),
+                'danger' => Color::hex('#D72C0D'),    // Polaris critical
+                'warning' => Color::hex('#B98900'),   // Polaris caution
+                'info' => Color::hex('#2C6ECB'),      // Polaris highlight
+                'gray' => Color::Slate,
             ])
             // App Bridge — makes the panel run embedded inside Shopify Admin.
             ->renderHook(
