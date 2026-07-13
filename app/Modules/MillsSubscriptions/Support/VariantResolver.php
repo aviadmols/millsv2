@@ -76,6 +76,57 @@ final class VariantResolver
         return $labels;
     }
 
+    /**
+     * The variants as renderable lines — image, name, portion, pack, price.
+     *
+     * An id that no longer resolves is NOT dropped. A subscription silently missing a
+     * product it is being billed for is exactly the kind of thing that must be loud, so
+     * the line still appears, carrying a warning.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function lines(mixed $ids): array
+    {
+        $numeric = self::normalise($ids);
+        if ($numeric === []) {
+            return [];
+        }
+
+        $resolved = self::resolve($ids)->keyBy(fn (ProductVariant $v) => (string) $v->shopify_variant_id);
+
+        $lines = [];
+
+        foreach ($numeric as $id) {
+            $variant = $resolved->get($id);
+
+            if ($variant === null) {
+                $lines[] = [
+                    'title' => __('subscriptions.unknown_variant', ['id' => $id]),
+                    'image_url' => null,
+                    'sku' => null,
+                    'grams' => null,
+                    'pack_size' => null,
+                    'price' => null,
+                    'warning' => __('subscriptions.variant_missing'),
+                ];
+
+                continue;
+            }
+
+            $lines[] = [
+                'title' => $variant->product?->title ?? '—',
+                'image_url' => $variant->image_url,
+                'sku' => $variant->sku,
+                'grams' => $variant->grams,
+                'pack_size' => $variant->pack_size,
+                'price' => $variant->price,
+                'quantity' => 1,
+            ];
+        }
+
+        return $lines;
+    }
+
     /** One variant, described the way an admin needs to read it. */
     public static function label(ProductVariant $variant): string
     {

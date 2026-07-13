@@ -68,6 +68,15 @@ class SubscriptionForm
                         DatePicker::make('next_charge_at')
                             ->label(__('subscriptions.next_charge'))
                             ->native(false),
+                        TextInput::make('discount_percent')
+                            ->label(__('subscriptions.discount_percent'))
+                            ->helperText(__('subscriptions.discount_help'))
+                            ->numeric()
+                            ->suffix('%')
+                            ->minValue(0)
+                            ->maxValue(100)
+                            ->default(10)
+                            ->required(),
                     ]),
 
                 Section::make(__('subscriptions.order_details'))

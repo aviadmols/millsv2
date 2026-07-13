@@ -3,25 +3,32 @@
 namespace App\Filament\Resources\Subscriptions\Schemas;
 
 use App\Models\Dog;
-use App\Models\ShopifyConnection;
+use App\Models\Subscription;
+use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
+use App\Modules\MillsSubscriptions\Services\Shopify\OrderHistoryService;
+use App\Modules\MillsSubscriptions\Support\SubscriptionPricing;
+use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
-use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
-use App\Modules\MillsSubscriptions\Services\Shopify\OrderHistoryService;
-use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Throwable;
 
 /**
- * The full subscription view — the subscriber, the plan, EACH DOG WITH THE PRODUCTS
- * IT ACTUALLY GETS, the real Shopify order history, the upcoming order, and the
- * billing ledger.
+ * The full subscription view: the subscriber, the plan, each dog WITH THE PRODUCTS IT IS
+ * BILLED FOR (and their pictures), the upcoming order and what it will cost, the real
+ * Shopify order history, and the money ledger.
  *
- * The products used to be invisible here: the only products entry read
- * `meta.line_items`, which nothing in the system ever writes. It now reads the real
- * source — the dog's chosen variants — resolved against the local product cache.
+ * The product and order lists are rendered through Blade views rather than Filament
+ * entries on purpose. Inside a RepeatableEntry, an array item is injected as the child
+ * schema's *constant state*, so a closure's `$record` is still the PARENT record — which
+ * is exactly how every order in the history ended up linking to /orders/1 (the id of the
+ * subscription) and how the line items rendered empty. Building the link and the lines in
+ * the service, and rendering them in a view, removes that whole class of bug.
  */
 class SubscriptionInfolist
 {
@@ -33,14 +40,14 @@ class SubscriptionInfolist
                 ->schema([
                     TextEntry::make('customer_name')
                         ->label(__('subscriptions.name'))
-                        ->state(fn ($record) => $record->customer?->fullName() ?? '—'),
+                        ->state(fn (Subscription $record) => $record->customer?->fullName() ?? '—'),
                     TextEntry::make('customer.email')->label(__('subscriptions.email'))->copyable(),
                     TextEntry::make('customer.phone')->label(__('subscriptions.phone'))->placeholder('—'),
                     TextEntry::make('customer.shopify_customer_id')->label(__('subscriptions.shopify_id'))->placeholder('—'),
                     TextEntry::make('address')
                         ->label(__('subscriptions.address'))
                         ->columnSpanFull()
-                        ->state(fn ($record) => trim(implode(', ', array_filter([
+                        ->state(fn (Subscription $record) => trim(implode(', ', array_filter([
                             $record->customer?->address1,
                             $record->customer?->address2,
                             $record->customer?->city,
@@ -70,10 +77,40 @@ class SubscriptionInfolist
                     TextEntry::make('frequency_months')
                         ->label(__('subscriptions.frequency'))
                         ->formatStateUsing(fn (int $state) => $state === 2 ? __('subscriptions.every_2_months') : __('subscriptions.monthly')),
-                    TextEntry::make('next_charge_at')->label(__('subscriptions.next_charge'))->dateTime('Y-m-d')->placeholder('—'),
+                    TextEntry::make('next_charge_at')
+                        ->label(__('subscriptions.next_charge'))
+                        ->dateTime('Y-m-d')
+                        ->placeholder('—'),
                 ]),
 
-            // Each dog, and the products that dog is actually billed for.
+            // The upcoming order: what ships next, and the amount PayMe will be asked for.
+            Section::make(__('subscriptions.upcoming_order'))
+                ->columns(2)
+                ->schema([
+                    TextEntry::make('next_charge_amount')
+                        ->label(__('subscriptions.next_charge_amount'))
+                        ->money('ILS')
+                        ->weight('bold')
+                        ->placeholder(__('subscriptions.amount_unknown'))
+                        ->helperText(fn (Subscription $record) => self::amountHint($record)),
+                    TextEntry::make('next_charge_at')
+                        ->label(__('subscriptions.next_charge'))
+                        ->dateTime('Y-m-d')
+                        ->placeholder('—'),
+
+                    TextEntry::make('discount_percent')
+                        ->label(__('subscriptions.discount_percent'))
+                        ->suffix('%')
+                        ->placeholder('0'),
+
+                    ViewEntry::make('upcoming_order')
+                        ->hiddenLabel()
+                        ->columnSpanFull()
+                        ->view('filament.infolists.upcoming-order')
+                        ->state(fn (Subscription $record) => self::upcomingOrder($record)),
+                ]),
+
+            // Each dog, its computed requirement, and the products it is billed for.
             Section::make(__('subscriptions.dogs').' — '.__('subscriptions.products'))
                 ->schema([
                     RepeatableEntry::make('dogs')
@@ -85,78 +122,36 @@ class SubscriptionInfolist
                             TextEntry::make('age')->label(__('subscriptions.age'))->placeholder('—'),
                             TextEntry::make('allergies')->label(__('subscriptions.allergies'))->placeholder('—'),
 
-                            // What the engine says this dog needs — so an admin can see
-                            // at a glance whether the chosen product still fits.
                             TextEntry::make('requirement')
                                 ->label(__('subscriptions.daily_requirement'))
                                 ->columnSpanFull()
                                 ->state(fn (Dog $record) => self::requirement($record))
                                 ->color('gray'),
 
-                            TextEntry::make('subscription_products')
+                            ViewEntry::make('subscription_products')
                                 ->label(__('subscriptions.products'))
                                 ->columnSpanFull()
-                                ->state(fn (Dog $record) => VariantResolver::labels($record->selected_variants))
-                                ->listWithLineBreaks()
-                                ->bulleted()
-                                ->placeholder(__('subscriptions.no_products')),
+                                ->view('filament.infolists.product-lines')
+                                ->state(fn (Dog $record) => VariantResolver::lines($record->selected_variants)),
 
-                            TextEntry::make('addon_products')
+                            ViewEntry::make('addon_products')
                                 ->label(__('subscriptions.addons'))
                                 ->columnSpanFull()
-                                ->state(fn (Dog $record) => VariantResolver::labels($record->addons_products))
-                                ->listWithLineBreaks()
-                                ->bulleted()
-                                ->placeholder('—'),
+                                ->view('filament.infolists.product-lines')
+                                ->state(fn (Dog $record) => VariantResolver::lines($record->addons_products))
+                                ->visible(fn (Dog $record) => VariantResolver::lines($record->addons_products) !== []),
                         ]),
                 ]),
 
-            // The next order that will go out (the Shopify draft).
-            Section::make(__('subscriptions.upcoming_order'))
-                ->columns(2)
-                ->schema([
-                    TextEntry::make('next_charge_at')
-                        ->label(__('subscriptions.next_charge'))
-                        ->dateTime('Y-m-d')
-                        ->placeholder('—'),
-                    TextEntry::make('draft_order_id')
-                        ->label(__('subscriptions.draft_order'))
-                        ->placeholder(__('subscriptions.no_draft_yet'))
-                        ->url(fn ($record) => self::orderUrl($record->draft_order_id, 'draft_orders'))
-                        ->openUrlInNewTab()
-                        ->color(fn ($record) => self::orderUrl($record->draft_order_id, 'draft_orders') ? 'primary' : 'gray'),
-                ]),
-
-            // The customer's REAL Shopify orders — read live (cached 5 min).
+            // The customer's REAL Shopify orders, each linking to ITS OWN order.
             Section::make(__('subscriptions.order_history'))
                 ->schema([
-                    RepeatableEntry::make('shopify_orders')
+                    ViewEntry::make('shopify_orders')
                         ->hiddenLabel()
-                        ->columns(5)
-                        ->state(fn ($record) => $record->customer
+                        ->view('filament.infolists.order-history')
+                        ->state(fn (Subscription $record) => $record->customer
                             ? app(OrderHistoryService::class)->forCustomer($record->customer)
-                            : [])
-                        ->schema([
-                            TextEntry::make('name')
-                                ->label(__('subscriptions.order'))
-                                ->url(fn ($state, $record) => self::orderUrl((string) ($record['id'] ?? '')))
-                                ->openUrlInNewTab()
-                                ->color('primary'),
-                            TextEntry::make('created_at')->label(__('subscriptions.date'))->dateTime('Y-m-d'),
-                            TextEntry::make('financial_status')->label(__('subscriptions.status'))->badge()
-                                ->color(fn ($state) => $state === 'PAID' ? 'success' : 'warning'),
-                            TextEntry::make('total')->label(__('subscriptions.total'))->money('ILS'),
-                            TextEntry::make('items')
-                                ->label(__('subscriptions.products'))
-                                ->state(fn ($record) => array_map(
-                                    fn (array $item) => trim(($item['title'] ?? '—').' × '.($item['quantity'] ?? 1)
-                                        .($item['sku'] ? '  ('.$item['sku'].')' : '')),
-                                    $record['line_items'] ?? [],
-                                ))
-                                ->listWithLineBreaks()
-                                ->bulleted()
-                                ->columnSpanFull(),
-                        ]),
+                            : []),
                 ]),
 
             Section::make(__('subscriptions.billing_history'))
@@ -182,15 +177,46 @@ class SubscriptionInfolist
                                 ->label(__('subscriptions.created_order'))
                                 ->placeholder('—')
                                 ->formatStateUsing(fn ($state) => $state ? __('subscriptions.view_in_shopify') : '—')
-                                ->url(fn ($record) => self::orderUrl($record->shopify_order_id))
+                                ->url(fn ($state) => OrderHistoryService::adminUrl('orders', (string) $state))
                                 ->openUrlInNewTab()
-                                ->color(fn ($record) => self::orderUrl($record->shopify_order_id) ? 'primary' : 'gray'),
+                                ->color(fn ($state) => $state ? 'primary' : 'gray'),
                         ]),
                 ]),
         ]);
     }
 
-    /** "needs ~149 g/day (551 kcal)" — or why we can't say. */
+    /**
+     * The draft order, if one exists. NEVER creates it as a side effect of looking at the
+     * page — a read must not write to Shopify. Creating it is an explicit action.
+     *
+     * @return array<string, mixed>
+     */
+    private static function upcomingOrder(Subscription $subscription): array
+    {
+        if (empty($subscription->draft_order_id)) {
+            return [];
+        }
+
+        try {
+            return app(DraftOrderService::class)->get($subscription);
+        } catch (Throwable) {
+            return [];   // Shopify unreachable — the screen still renders.
+        }
+    }
+
+    /** Show the products-only subtotal beside the real total, so shipping/tax is visible. */
+    private static function amountHint(Subscription $subscription): ?string
+    {
+        $subtotal = SubscriptionPricing::productsSubtotal($subscription);
+
+        if ($subtotal <= 0) {
+            return null;
+        }
+
+        return __('subscriptions.products_subtotal', ['amount' => '₪'.number_format($subtotal, 2)]);
+    }
+
+    /** "needs ~149 g/day (551 kcal)" — so a mismatch with the chosen product is visible. */
     private static function requirement(Dog $dog): string
     {
         $recommender = app(DogFoodRecommender::class);
@@ -210,21 +236,5 @@ class SubscriptionInfolist
             'grams' => $best['benchmark'],
             'calories' => $result['calories'],
         ]);
-    }
-
-    private static function orderUrl(?string $id, string $resource = 'orders'): ?string
-    {
-        if (empty($id) || preg_match('/(\d+)/', (string) $id, $m) !== 1) {
-            return null;
-        }
-
-        return 'https://admin.shopify.com/store/'.self::storeHandle()."/{$resource}/{$m[1]}";
-    }
-
-    private static function storeHandle(): string
-    {
-        $domain = (string) (ShopifyConnection::current()?->shop_domain ?: config('shopify.shop_domain'));
-
-        return str_replace('.myshopify.com', '', $domain) ?: 'millsforpets';
     }
 }

@@ -81,4 +81,48 @@ return [
     'body_heavy' => 'מלא',
     'neutered' => 'מסורס/מעוקרת',
     'allergies_help' => 'רגישויות מופרדות בפסיק. מוצר עם תגית תואמת לא יוצע לכלב.',
+
+    'no_orders' => 'אין הזמנות',
+    'variant_missing' => 'המוצר לא נמצא בקטלוג',
+    'next_charge_amount' => 'סכום החיוב הבא',
+    'amount_unknown' => 'לא ידוע — צור הזמנה קרובה',
+    'products_subtotal' => 'מוצרים בלבד: :amount (ההפרש הוא משלוח/מע"מ)',
+
+    'action_pause' => 'עצור מנוי',
+    'action_pause_confirm' => 'החיוב החוזר ייפסק. הלקוח לא יחויב ולא יקבל משלוח עד להפעלה מחדש.',
+    'paused_ok' => 'המנוי נעצר',
+
+    'action_resume' => 'הפעל מחדש',
+    'action_resume_confirm' => 'החיוב החוזר יחזור. אם תאריך החיוב כבר עבר — הוא יוזז להיום כדי שלא ייווצר חיוב מפתיע.',
+    'resumed_ok' => 'המנוי הופעל מחדש',
+
+    'action_postpone' => 'דחה חיוב הבא',
+    'action_postpone_confirm' => 'דילוג על המחזור הנוכחי — הלקוח לא יחויב ולא יקבל משלוח הפעם.',
+    'postpone_until' => 'דחה עד',
+    'postpone_help' => 'ברירת המחדל: מחזור אחד קדימה לפי תדירות המנוי.',
+    'postponed_ok' => 'החיוב נדחה ל-:date',
+
+    'action_charge_now' => 'חייב עכשיו',
+    'action_charge_now_confirm' => 'הכרטיס יחויב ב-:amount עכשיו, תיווצר הזמנה ב-Shopify, ותאריך החיוב הבא יתקדם. פעולה זו אינה הפיכה.',
+    'action_charge_now_no_amount' => 'לא ידוע סכום החיוב. צור קודם "הזמנה קרובה" — המערכת לא תנחש סכום.',
+    'action_charge_now_submit' => 'כן, חייב עכשיו',
+    'charged_ok' => 'החיוב בוצע והזמנה נוצרה',
+    'charge_failed' => 'החיוב נכשל',
+    'charge_status_needs_card_update' => 'דרוש עדכון אמצעי תשלום.',
+    'charge_status_not_active' => 'המנוי אינו פעיל.',
+    'charge_status_no_amount' => 'לא ידוע סכום החיוב.',
+    'charge_status_already_charged' => 'החיוב כבר בוצע היום.',
+    'charge_status_kill_switch' => 'החיובים מושבתים במערכת.',
+
+    'action_build_draft' => 'צור הזמנה קרובה',
+    'action_build_draft_confirm' => 'תיווצר טיוטת הזמנה ב-Shopify מהמוצרים של המנוי, וסכום החיוב הבא יתעדכן לפיה.',
+    'draft_ok' => 'ההזמנה הקרובה נוצרה — :total',
+    'draft_failed' => 'יצירת ההזמנה נכשלה',
+    'draft_no_products' => 'אין מוצרים במנוי, אז אין מה להזמין. הוסף מוצרים לכלב תחילה.',
+
+    'action_failed' => 'הפעולה נכשלה',
+
+    'discount_percent' => 'הנחת מנוי',
+    'discount_title' => 'הנחת מנוי',
+    'discount_help' => 'ההנחה שתוחל על ההזמנה הקרובה. ההזמנות ההיסטוריות חויבו ב-10%.',
 ];

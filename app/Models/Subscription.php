@@ -31,6 +31,9 @@ class Subscription extends Model
             'frequency_months' => 'integer',
             'attempt_count' => 'integer',
             'next_charge_at' => 'datetime',
+            'next_charge_amount' => 'decimal:2',
+            'next_charge_amount_at' => 'datetime',
+            'discount_percent' => 'decimal:2',
             'next_retry_at' => 'datetime',
             'meta' => 'array',
         ];

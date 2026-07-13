@@ -230,7 +230,7 @@ class SubscriptionApiController extends AbstractApiController
 
     public function updateDraftOrder(string $id, DraftOrderService $drafts): JsonResponse
     {
-        return $this->draft(fn () => $drafts->update($this->resolveSubscription($id)));
+        return $this->draft(fn () => $drafts->refresh($this->resolveSubscription($id)));
     }
 
     public function getDraftOrder(string $id, DraftOrderService $drafts): JsonResponse

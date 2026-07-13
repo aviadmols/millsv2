@@ -81,4 +81,48 @@ return [
     'body_heavy' => 'Heavy',
     'neutered' => 'Neutered / spayed',
     'allergies_help' => 'Comma-separated sensitivities. A product tagged with one is never offered to this dog.',
+
+    'no_orders' => 'No orders',
+    'variant_missing' => 'Not found in the catalog',
+    'next_charge_amount' => 'Next charge amount',
+    'amount_unknown' => 'Unknown — build the upcoming order',
+    'products_subtotal' => 'Products only: :amount (the difference is shipping/tax)',
+
+    'action_pause' => 'Pause subscription',
+    'action_pause_confirm' => 'Recurring billing stops. The customer is not charged and receives no shipment until it is resumed.',
+    'paused_ok' => 'Subscription paused',
+
+    'action_resume' => 'Resume',
+    'action_resume_confirm' => 'Recurring billing restarts. If the charge date has already passed it is moved to today, so resuming is never a surprise charge.',
+    'resumed_ok' => 'Subscription resumed',
+
+    'action_postpone' => 'Postpone next charge',
+    'action_postpone_confirm' => 'Skip this cycle — the customer is not charged and receives no shipment this time.',
+    'postpone_until' => 'Postpone until',
+    'postpone_help' => 'Defaults to one cycle ahead, based on the subscription frequency.',
+    'postponed_ok' => 'Next charge postponed to :date',
+
+    'action_charge_now' => 'Charge now',
+    'action_charge_now_confirm' => 'The card will be charged :amount now, a Shopify order will be created, and the next charge date moves forward. This cannot be undone.',
+    'action_charge_now_no_amount' => 'The charge amount is unknown. Build the upcoming order first — the system will not guess an amount.',
+    'action_charge_now_submit' => 'Yes, charge now',
+    'charged_ok' => 'Charged, and the order was created',
+    'charge_failed' => 'The charge failed',
+    'charge_status_needs_card_update' => 'The payment method needs updating.',
+    'charge_status_not_active' => 'The subscription is not active.',
+    'charge_status_no_amount' => 'The charge amount is unknown.',
+    'charge_status_already_charged' => 'This has already been charged today.',
+    'charge_status_kill_switch' => 'Billing is switched off system-wide.',
+
+    'action_build_draft' => 'Build upcoming order',
+    'action_build_draft_confirm' => "A draft order is created in Shopify from the subscription's products, and the next charge amount is set from its total.",
+    'draft_ok' => 'Upcoming order built — :total',
+    'draft_failed' => 'Could not build the order',
+    'draft_no_products' => 'The subscription has no products, so there is nothing to order. Add products to the dog first.',
+
+    'action_failed' => 'The action failed',
+
+    'discount_percent' => 'Subscriber discount',
+    'discount_title' => 'Subscriber discount',
+    'discount_help' => 'Applied to the upcoming order. The historical orders were billed at 10%.',
 ];

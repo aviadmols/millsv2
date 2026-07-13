@@ -7,12 +7,17 @@ use App\Domain\Billing\IdempotencyKey;
 use App\Domain\Billing\Ledger;
 use App\Models\PaymentLedger;
 use App\Models\Subscription;
+use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
+use App\Modules\MillsSubscriptions\Services\Shopify\OrderCreationService;
+use App\Modules\MillsSubscriptions\Support\SubscriptionPricing;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * The charge pipeline (CLAUDE.md laws #2/#4/#5, ARCHITECTURE.md §5). Money truth
@@ -168,22 +173,37 @@ class ChargeOrchestrator
         return ['success' => false, 'status' => 'failed', 'ledger_id' => $ledger->id, 'error' => (string) $message];
     }
 
-    /** Recurring charge amount (ILS). Phase 4 refines to per-dog variant pricing. */
+    /**
+     * The recurring charge amount (ILS) — the total of the upcoming order.
+     *
+     * Returns 0 when the amount is genuinely unknown, which aborts the charge upstream
+     * (`no_amount`). That is deliberate: a subscription whose price we cannot establish
+     * must not be billed a guess. The number comes from the draft order, so what the
+     * admin sees on screen and what PayMe is asked for are the same number.
+     */
     private function resolveAmount(Subscription $subscription): float
     {
-        $meta = (array) ($subscription->meta ?? []);
-
-        return (float) ($meta['price'] ?? 0);
+        return SubscriptionPricing::amount($subscription) ?? 0.0;
     }
 
+    /**
+     * Compensating side effect: record the paid order in Shopify, then build the preview
+     * draft for the NEXT cycle (which also refreshes next_charge_amount).
+     *
+     * Neither may unwind the charge. The money has moved; a failure here is logged loudly
+     * and left for repair, because a missing order is fixable and a double charge is not.
+     */
     private function createShopifyOrder(Subscription $subscription, PaymentLedger $ledger): void
     {
-        // TODO Phase 5b: build the order payload, stamp via ShopifyOrderAttribution,
-        // POST orderCreate with an inline manual/external sale transaction, store
-        // shopify_order_id on the ledger, and create the next-cycle preview draft.
-        Log::info('billing.order_create.pending', [
-            'subscription_id' => $subscription->id,
-            'ledger_id' => $ledger->id,
-        ]);
+        app(OrderCreationService::class)->createPaidOrder($subscription, $ledger);
+
+        try {
+            app(DraftOrderService::class)->refresh($subscription->fresh());
+        } catch (Throwable $e) {
+            SystemLog::warning('billing', 'could not build the next upcoming order', [
+                'message' => $e->getMessage(),
+                'ledger_id' => $ledger->id,
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+        }
     }
 }
