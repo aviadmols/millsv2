@@ -62,6 +62,7 @@ Route::middleware('api.secret')
 
     Route::prefix('dogs')->group(function () {
         Route::post('quiz', [DogApiController::class, 'saveQuiz']);          // ← the theme's quiz
+        Route::post('recommend', [DogApiController::class, 'recommend']);    // weight → variant
         Route::post('link-quiz', [DogApiController::class, 'linkQuiz']);
         Route::patch('addons/add', [DogApiController::class, 'addAddon']);
         Route::patch('addons/remove', [DogApiController::class, 'removeAddon']);

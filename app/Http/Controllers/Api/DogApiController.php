@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Dog;
+use App\Models\ProductVariant;
 use App\Models\QuizDog;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
 use App\Modules\MillsSubscriptions\Support\StorefrontPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +22,69 @@ class DogApiController extends AbstractApiController
     public function hello(): JsonResponse
     {
         return response()->json(['message' => 'Mills subscriptions API', 'service' => 'mills-v2']);
+    }
+
+    /**
+     * Weight → calories → daily grams → the right variant.
+     *
+     * The same engine the admin uses, so the server can be the single source of
+     * truth for a portion size. The theme still computes this in JS today; this
+     * endpoint exists so it can stop.
+     *
+     * Accepts either a saved dog (`dogId`) or raw quiz answers.
+     */
+    public function recommend(Request $request, DogFoodRecommender $recommender): JsonResponse
+    {
+        $dog = $request->filled('dogId')
+            ? $this->resolveDog((string) $request->input('dogId'))
+            : new Dog($request->validate([
+                'weight' => ['required', 'numeric', 'min:0'],
+                'age' => ['required', 'numeric', 'min:0'],
+                'activity' => ['nullable', 'integer', 'in:0,1,2'],
+                'body' => ['nullable', 'integer', 'in:0,1,2'],
+                'neutered' => ['nullable', 'boolean'],
+                'allergies' => ['nullable', 'string'],
+            ]));
+
+        $result = $recommender->recommend($dog);
+
+        if (! $result['can_recommend']) {
+            return response()->json([
+                'can_recommend' => false,
+                'calories' => $result['calories'],
+                'reason' => $result['calories'] > DogFoodRecommender::CALORIES_NO_REC_MAX
+                    ? 'needs_custom_plan'
+                    : 'out_of_range',
+                'products' => [],
+            ]);
+        }
+
+        return response()->json([
+            'can_recommend' => true,
+            'calories' => $result['calories'],
+            'products' => array_map(fn (array $entry) => [
+                'id' => (string) $entry['product']->shopify_product_id,
+                'title' => $entry['product']->title,
+                'image_url' => $entry['product']->image_url,
+                'grams_benchmark' => $entry['benchmark'],
+                'variant' => $this->variant($entry['variant']),
+                'variant2' => $entry['variant2'] ? $this->variant($entry['variant2']) : null,
+            ], $result['products']),
+        ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function variant(ProductVariant $variant): array
+    {
+        return [
+            'id' => (string) $variant->shopify_variant_id,
+            'title' => $variant->title,
+            'sku' => $variant->sku,
+            'grams' => $variant->grams,
+            'pack_size' => $variant->pack_size,
+            'price' => $variant->price,
+            'available' => (bool) $variant->available,
+        ];
     }
 
     /** The quiz: store the answers, hand back the id the theme links later. */

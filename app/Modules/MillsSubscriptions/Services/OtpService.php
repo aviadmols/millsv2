@@ -6,6 +6,7 @@ use App\Mail\OtpMail;
 use App\Models\Customer;
 use App\Models\OtpCode;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
+use App\Support\PhoneNumber;
 use App\Support\StorefrontToken;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -41,13 +42,13 @@ class OtpService
      */
     public function request(string $destination, string $channel = self::CHANNEL_EMAIL): array
     {
-        $destination = trim($destination);
-        if ($destination === '') {
+        $key = $this->canonical($destination, $channel);
+        if ($key === null) {
             return ['ok' => false, 'error' => 'invalid_destination'];
         }
 
         $recent = OtpCode::query()
-            ->where('destination', $destination)
+            ->where('destination', $key)
             ->where('created_at', '>=', now()->subMinutes(self::RATE_WINDOW_MINUTES))
             ->count();
         if ($recent >= self::RATE_LIMIT) {
@@ -61,7 +62,7 @@ class OtpService
         OtpCode::query()->create([
             'customer_id' => $customer?->id,
             'channel' => $channel,
-            'destination' => $destination,
+            'destination' => $key,          // canonical, so verify() finds it back
             'code_hash' => Hash::make($code),
             'expires_at' => now()->addMinutes(self::TTL_MINUTES),
         ]);
@@ -69,9 +70,9 @@ class OtpService
         // Only actually deliver when the destination maps to a real customer.
         if ($customer !== null) {
             if ($channel === self::CHANNEL_SMS) {
-                $this->sms->send($destination, __('otp.sms.body', ['code' => $code]));
+                $this->sms->send(PhoneNumber::local($destination) ?? $destination, __('otp.sms.body', ['code' => $code]));
             } else {
-                Mail::to($destination)->send(new OtpMail($code, self::TTL_MINUTES));
+                Mail::to($key)->send(new OtpMail($code, self::TTL_MINUTES));
             }
         }
 
@@ -85,10 +86,13 @@ class OtpService
      */
     public function verify(string $destination, string $code, string $channel = self::CHANNEL_EMAIL): array
     {
-        $destination = trim($destination);
+        $key = $this->canonical($destination, $channel);
+        if ($key === null) {
+            return ['ok' => false, 'error' => 'invalid_destination'];
+        }
 
         $otp = OtpCode::query()
-            ->where('destination', $destination)
+            ->where('destination', $key)
             ->whereNull('consumed_at')
             ->where('expires_at', '>', now())
             ->latest('id')
@@ -130,10 +134,33 @@ class OtpService
         ];
     }
 
+    /**
+     * SMS logins are matched on the NORMALISED phone key, never the raw string —
+     * `050-123-4567`, `0501234567` and `+972501234567` are the same customer, and an
+     * exact-string match would find none of them.
+     */
     private function findCustomer(string $destination, string $channel): ?Customer
     {
-        $column = $channel === self::CHANNEL_SMS ? 'phone' : 'email';
+        if ($channel === self::CHANNEL_SMS) {
+            return Customer::findByPhone($destination);
+        }
 
-        return Customer::query()->where($column, $destination)->first();
+        return Customer::query()->where('email', trim(strtolower($destination)))->first();
+    }
+
+    /**
+     * The single spelling of a destination that everything keys on — the OTP row, the
+     * rate limit, and the verify lookup. Without it, requesting a code with one
+     * spelling and entering it with another would never match.
+     */
+    private function canonical(string $destination, string $channel): ?string
+    {
+        if ($channel === self::CHANNEL_SMS) {
+            return PhoneNumber::normalise($destination);
+        }
+
+        $email = trim(strtolower($destination));
+
+        return $email === '' ? null : $email;
     }
 }

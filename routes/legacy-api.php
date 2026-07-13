@@ -64,6 +64,7 @@ Route::middleware('api.secret')
     Route::prefix('shopify/dog')->group(function () {
         Route::get('/', [DogApiController::class, 'hello']);
         Route::post('save-quiz-dog', [DogApiController::class, 'saveQuiz']);
+        Route::post('recommend', [DogApiController::class, 'recommend']);
         Route::post('link-quiz-dog-customer', [DogApiController::class, 'linkQuiz']);
         Route::patch('add-addon', [DogApiController::class, 'addAddon']);
         Route::patch('remove-addon', [DogApiController::class, 'removeAddon']);

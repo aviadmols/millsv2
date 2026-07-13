@@ -2,17 +2,20 @@
 
 namespace App\Modules\MillsSubscriptions\Services\Sms;
 
+use App\Models\SystemLog;
+use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
- * 019 SMS adapter (D13). 019 exposes an XML-over-HTTP API. This builds the
- * request from `config('sms.019')`; when credentials are absent it fails soft
- * (logs + returns false) so the OTP flow can fall back to email without error.
+ * 019 SMS adapter (D13) — the channel that carries the personal-area login code.
  *
- * NOTE: the exact 019 XML schema is confirmed against the account once Aviad
- * provides credentials — the structure below matches 019's documented
- * send-SMS envelope and is guarded behind the config check.
+ * 019 takes an XML body and authenticates with a bearer token in the HTTP header.
+ * The previous version built the XML with a <username> but never sent the token
+ * anywhere, so every send would have been rejected as unauthenticated.
+ *
+ * Fails soft: with no credentials it logs and returns false rather than throwing, so
+ * a misconfigured SMS channel can never take the login flow down with it.
  */
 class Sms019Sender implements SmsSender
 {
@@ -22,50 +25,68 @@ class Sms019Sender implements SmsSender
         $username = (string) ($cfg['username'] ?? '');
         $token = (string) ($cfg['token'] ?? '');
         $sender = (string) ($cfg['sender'] ?? 'Mills');
-        $baseUrl = (string) ($cfg['base_url'] ?? 'https://019sms.co.il/api');
+        $baseUrl = rtrim((string) ($cfg['base_url'] ?? 'https://019sms.co.il/api'), '/');
 
         if ($username === '' || $token === '') {
-            Log::warning('sms.019.not_configured', ['phone_fingerprint' => substr(hash('sha256', $phone), 0, 12)]);
+            SystemLog::warning('otp', 'SMS not sent — 019 is not configured', [
+                'hint' => 'Settings → SMS (019): username + token',
+            ]);
 
             return false;
         }
 
-        $xml = $this->buildXml($username, $token, $sender, $phone, $message);
+        // 019 dials the local Israeli form.
+        $destination = PhoneNumber::local($phone) ?? $phone;
 
         try {
-            $response = Http::withHeaders(['Content-Type' => 'application/xml'])
-                ->withBody($xml, 'application/xml')
+            $response = Http::withToken($token)          // Authorization: Bearer <token>
+                ->withHeaders(['Content-Type' => 'application/xml'])
+                ->withBody($this->buildXml($username, $sender, $destination, $message), 'application/xml')
                 ->timeout(15)
                 ->post($baseUrl);
 
-            $ok = $response->successful() && ! str_contains($response->body(), '<status>-');
+            $status = $this->statusFrom($response->body());
+            $ok = $response->successful() && $status === 0;
+
             if (! $ok) {
-                Log::warning('sms.019.send_failed', ['http' => $response->status()]);
+                SystemLog::error('otp', 'SMS send failed at 019', [
+                    'http' => $response->status(),
+                    'provider_status' => $status,
+                    // Never log the number itself.
+                    'phone_fingerprint' => substr(hash('sha256', $destination), 0, 12),
+                ]);
             }
 
             return $ok;
-        } catch (\Throwable $e) {
-            Log::error('sms.019.exception', ['message' => $e->getMessage()]);
+        } catch (Throwable $e) {
+            SystemLog::error('otp', 'SMS send threw', ['message' => $e->getMessage()]);
 
             return false;
         }
     }
 
-    private function buildXml(string $username, string $token, string $sender, string $phone, string $message): string
+    /** 019 answers with <status>0</status> on success and a negative code on failure. */
+    private function statusFrom(string $body): ?int
     {
+        return preg_match('/<status>\s*(-?\d+)\s*<\/status>/i', $body, $m) === 1 ? (int) $m[1] : null;
+    }
+
+    private function buildXml(string $username, string $sender, string $phone, string $message): string
+    {
+        $username = htmlspecialchars($username, ENT_XML1);
+        $sender = htmlspecialchars($sender, ENT_XML1);
         $phone = htmlspecialchars($phone, ENT_XML1);
         $message = htmlspecialchars($message, ENT_XML1);
-        $sender = htmlspecialchars($sender, ENT_XML1);
 
         return <<<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<sms>
-  <user><username>{$username}</username></user>
-  <source>{$sender}</source>
-  <destinations><phone>{$phone}</phone></destinations>
-  <message>{$message}</message>
-  <add_unsubscribe>0</add_unsubscribe>
-</sms>
-XML;
+        <?xml version="1.0" encoding="UTF-8"?>
+        <sms>
+          <user><username>{$username}</username></user>
+          <source>{$sender}</source>
+          <destinations><phone>{$phone}</phone></destinations>
+          <message>{$message}</message>
+          <add_unsubscribe>0</add_unsubscribe>
+        </sms>
+        XML;
     }
 }

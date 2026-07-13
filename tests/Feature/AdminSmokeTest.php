@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\Dog;
+use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
@@ -42,5 +45,65 @@ class AdminSmokeTest extends TestCase
         $this->get("/admin/subscriptions/{$sub->id}")
             ->assertSuccessful()
             ->assertSee('owner@example.com');
+    }
+
+    /**
+     * The whole point of the last round of work: a subscription must SHOW the
+     * products its dog is billed for, and what the engine says that dog needs. This
+     * used to render an empty "no products" placeholder no matter what.
+     */
+    public function test_subscription_view_shows_the_dogs_products_and_its_requirement(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $customer = Customer::query()->create(['email' => 'dogowner@example.com', 'shopify_customer_id' => '456']);
+
+        $sub = new Subscription([
+            'customer_id' => $customer->id,
+            'frequency_months' => 1,
+            'payment_state' => PaymentState::PAYME->value,
+            'next_charge_at' => now()->addMonth(),
+        ]);
+        $sub->forceFill(['status' => SubscriptionStatus::ACTIVE->value])->save();
+
+        $product = Product::query()->create([
+            'shopify_product_id' => '9001',
+            'title' => 'Salmon & Asparagus',
+            'status' => 'active',
+            'multiplier' => 1.0,
+            'collections' => ['כלבים'],
+        ]);
+        ProductVariant::query()->create([
+            'shopify_variant_id' => '55501',
+            'product_id' => $product->id,
+            'title' => '500g',
+            'sku' => 'SA30 - אריזה יומית של 500 גרם',
+            'price' => 171.00,
+            'grams' => 500,
+            'pack_size' => 30,
+            'available' => true,
+        ]);
+
+        Dog::query()->create([
+            'customer_id' => $customer->id,
+            'subscription_id' => $sub->id,
+            'name' => 'Rex',
+            'status' => 'active',
+            'weight' => 10,
+            'age' => 3,
+            'activity' => 1,
+            'body' => 1,
+            'neutered' => true,
+            // Stored as a GID on purpose — the resolver must normalise it to find the
+            // numeric id the product cache holds.
+            'selected_variants' => ['gid://shopify/ProductVariant/55501'],
+        ]);
+
+        $response = $this->get("/admin/subscriptions/{$sub->id}")->assertSuccessful();
+
+        $response->assertSee('Rex');
+        $response->assertSee('Salmon &amp; Asparagus', escape: false);   // the product resolved
+        $response->assertSee('500');                                     // its portion
+        $response->assertSee('492');                                     // the dog's computed kcal
     }
 }

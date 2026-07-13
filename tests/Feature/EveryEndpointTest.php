@@ -181,6 +181,9 @@ class EveryEndpointTest extends TestCase
 
         // ---------- /api : dogs ----------
         $this->call_('POST', '/api/dogs/quiz', ['name' => 'Q'], $this->apiHeaders());
+        $this->call_('POST', '/api/dogs/recommend', [
+            'weight' => 10, 'age' => 3, 'activity' => 1, 'body' => 1, 'neutered' => true,
+        ], $this->apiHeaders());
         $this->call_('POST', '/api/dogs/link-quiz', [
             'customerId' => (string) $cust, 'quizDogId' => 'quiz-abc', 'variants' => ['v-2'],
         ], $this->apiHeaders());
@@ -232,6 +235,7 @@ class EveryEndpointTest extends TestCase
         $this->call_('GET', "/shopify/subscription/{$sub}/draft-order", [], $this->apiHeaders(), [503, 502]);
 
         $this->call_('POST', '/shopify/dog/save-quiz-dog', ['name' => 'L'], $this->apiHeaders());
+        $this->call_('POST', '/shopify/dog/recommend', ['weight' => 10, 'age' => 3], $this->apiHeaders());
         $this->call_('POST', '/shopify/dog/link-quiz-dog-customer', [
             'customerId' => (string) $cust, 'quizDogId' => 'quiz-abc', 'variants' => ['v-4'],
         ], $this->apiHeaders());
