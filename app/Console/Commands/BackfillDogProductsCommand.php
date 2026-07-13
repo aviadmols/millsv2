@@ -4,81 +4,92 @@ namespace App\Console\Commands;
 
 use App\Models\Dog;
 use App\Models\SystemLog;
-use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
+use App\Modules\MillsSubscriptions\Services\Shopify\OrderHistoryService;
+use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use Illuminate\Console\Command;
 use Throwable;
 
 /**
- * Backfill each dog's PRODUCTS from its Shopify `dog` metaobject.
+ * Repair the imported dogs' product selection.
  *
- * Why this exists: v1 mirrored dogs into Postgres but its mirror never carried
- * `selected_variants` / `addons_products` — those were read live from the
- * metaobject on every request (SYSTEM-MAP §2, known issue #4). So the v1 import
- * brought the dogs across with NULL products, and a subscription looks empty even
- * though the customer really does have flavours and add-ons.
+ * The v1 import brought every dog across with NULL selected_variants — not a bug in
+ * the import: v1's local mirror never carried that field. It read the products live
+ * from the Shopify `dog` metaobject on every request, so the data only ever existed
+ * in Shopify.
  *
- * The metaobjects still exist in the store, so this reads them once and writes the
- * variant ids into the local dog rows. After that the DB is the source of truth and
- * this command is never needed again.
+ * The obvious fix — read the metaobjects — does not work: the app's granted scopes
+ * don't include metaobject access, and the query comes back null. So we use the
+ * source that IS readable and is arguably more truthful anyway: the customer's most
+ * recent PAID order. Whatever Shopify actually shipped them is, by definition, what
+ * their subscription contains.
  *
- * Requires a live Shopify connection. Dry-run by default; pass --apply to write.
+ * Dry-run by default. Once applied, the DB is the source of truth and this command
+ * is never needed again.
  */
 class BackfillDogProductsCommand extends Command
 {
     protected $signature = 'mills:backfill-dog-products {--apply : Write the changes (otherwise dry-run)}';
 
-    protected $description = "Pull each dog's selected variants + add-ons from its Shopify metaobject into the local DB.";
+    protected $description = "Fill each dog's products from the customer's most recent paid Shopify order.";
 
-    private const QUERY = <<<'GQL'
-    query($id: ID!) {
-      metaobject(id: $id) {
-        id
-        fields { key value }
-      }
-    }
-    GQL;
-
-    public function handle(ShopifyAdminClient $shopify): int
+    public function handle(OrderHistoryService $orders): int
     {
-        if (! $shopify->isConnected()) {
-            $this->error('Shopify is not connected — reconnect the app first (Settings → Connect Shopify).');
-
-            return self::FAILURE;
-        }
-
         $apply = (bool) $this->option('apply');
         $this->info('[backfill-dog-products] mode='.($apply ? 'APPLY' : 'DRY-RUN'));
 
-        $dogs = Dog::query()->whereNotNull('legacy_shopify_gid')->get();
-        $this->line("{$dogs->count()} imported dog(s) to check.");
+        // Only dogs that are actually missing their products. (Postgres will not
+        // compare a json column to a string, hence the explicit ::text cast.)
+        $dogs = Dog::query()
+            ->with('customer')
+            ->where(fn ($q) => $q->whereNull('selected_variants')
+                ->orWhereRaw("selected_variants::text = '[]'"))
+            ->get();
+
+        $this->line("{$dogs->count()} dog(s) with no products.");
 
         $filled = 0;
-        $empty = 0;
+        $skipped = 0;
         $failed = 0;
 
         foreach ($dogs as $dog) {
+            $customer = $dog->customer;
+
+            if ($customer === null) {
+                $this->warn("  dog #{$dog->id}: no customer");
+                $skipped++;
+
+                continue;
+            }
+
             try {
-                $result = $shopify->graphql(self::QUERY, ['id' => $dog->legacy_shopify_gid]);
-                $fields = $result['data']['metaobject']['fields'] ?? null;
+                $variantIds = $orders->latestPaidVariantIds($customer);
 
-                if ($fields === null) {
-                    $this->warn("  dog #{$dog->id} ({$dog->name}): metaobject not found in Shopify");
-                    $failed++;
-
-                    continue;
-                }
-
-                $selected = $this->variants($fields, ['selected_variants', 'subscription_products']);
-                $addons = $this->variants($fields, ['addons_products']);
-
-                if ($selected === [] && $addons === []) {
-                    $this->line("  dog #{$dog->id} ({$dog->name}): no products on the metaobject");
-                    $empty++;
+                if ($variantIds === []) {
+                    $this->line("  dog #{$dog->id} ({$dog->name}): no paid order to learn from");
+                    $skipped++;
 
                     continue;
                 }
 
-                $this->info("  dog #{$dog->id} ({$dog->name}): ".count($selected).' variant(s), '.count($addons).' add-on(s)');
+                // Only the portioned subscription variants are the dog's food; anything
+                // else on that order (treats, accessories) is an add-on, not a flavour.
+                $variants = VariantResolver::resolve($variantIds);
+                $food = $variants->filter(fn ($v) => $v->grams !== null);
+                $extras = $variants->filter(fn ($v) => $v->grams === null);
+
+                if ($food->isEmpty()) {
+                    $this->line("  dog #{$dog->id} ({$dog->name}): the last order had no portioned food");
+                    $skipped++;
+
+                    continue;
+                }
+
+                $selected = $food->pluck('shopify_variant_id')->map('strval')->values()->all();
+                $addons = $extras->pluck('shopify_variant_id')->map('strval')->values()->all();
+
+                $this->info("  dog #{$dog->id} ({$dog->name}): ".implode(', ', $food->map(
+                    fn ($v) => ($v->product?->title ?? '?').' '.$v->grams.'g'
+                )->all()));
 
                 if ($apply) {
                     $dog->forceFill([
@@ -95,12 +106,12 @@ class BackfillDogProductsCommand extends Command
         }
 
         $this->newLine();
-        $this->info("filled={$filled}  no_products={$empty}  failed={$failed}");
+        $this->info("filled={$filled}  skipped={$skipped}  failed={$failed}");
 
-        SystemLog::info('shopify', 'dog products backfilled from Shopify metaobjects', [
+        SystemLog::info('shopify', 'dog products backfilled from paid orders', [
             'mode' => $apply ? 'apply' : 'dry-run',
             'filled' => $filled,
-            'no_products' => $empty,
+            'skipped' => $skipped,
             'failed' => $failed,
         ]);
 
@@ -109,42 +120,5 @@ class BackfillDogProductsCommand extends Command
         }
 
         return self::SUCCESS;
-    }
-
-    /**
-     * Metaobject list fields come back as a JSON-encoded string of variant GIDs.
-     *
-     * @param  list<array{key: string, value: string|null}>  $fields
-     * @param  list<string>  $keys
-     * @return list<string>
-     */
-    private function variants(array $fields, array $keys): array
-    {
-        $out = [];
-
-        foreach ($fields as $field) {
-            if (! in_array($field['key'] ?? '', $keys, true)) {
-                continue;
-            }
-
-            $value = $field['value'] ?? null;
-            if ($value === null || $value === '') {
-                continue;
-            }
-
-            $decoded = json_decode((string) $value, true);
-            $items = is_array($decoded) ? $decoded : [$value];
-
-            foreach ($items as $item) {
-                if (is_array($item)) {
-                    $item = $item['id'] ?? null;
-                }
-                if ($item !== null && $item !== '') {
-                    $out[] = (string) $item;
-                }
-            }
-        }
-
-        return array_values(array_unique($out));
     }
 }

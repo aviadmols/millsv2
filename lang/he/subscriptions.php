@@ -54,4 +54,31 @@ return [
 
     'addons' => 'תוספות',
     'products_help' => 'המוצרים שיחויבו בכל מחזור. הרשימה מסונכרנת מהחנות (מסך מוצרים ← "סנכרון מ-Shopify").',
+
+    'age' => 'גיל',
+    'allergies' => 'רגישויות',
+    'order_history' => 'היסטוריית הזמנות',
+    'no_draft_yet' => 'טרם נוצרה טיוטה',
+    'unknown_variant' => 'וריאנט לא מזוהה (:id) — ייתכן שנמחק מהחנות',
+    'grams_per_day' => 'גרם ליום',
+    'day_pack' => 'ימים באריזה',
+
+    'daily_requirement' => 'צריכה מומלצת',
+    'requirement' => 'הכלב צריך כ-:grams גרם ליום (:calories קלוריות)',
+    'calories_only' => ':calories קלוריות ליום — לא נמצא מוצר מתאים בקטלוג',
+    'no_recommendation' => 'לא ניתן לחשב המלצה (חסרים משקל/גיל, או מחוץ לטווח)',
+    'recommended' => 'מומלץ',
+    'show_all_products' => 'הצג את כל הקטלוג (ללא סינון לפי הכלב)',
+    'picker_help' => 'האפשרויות מסוננות למה שמתאים לכלב הזה, והמומלץ מסומן ★. הפעל "הצג את כל הקטלוג" כדי לעקוף.',
+
+    'activity' => 'רמת פעילות',
+    'activity_inactive' => 'לא פעיל',
+    'activity_active' => 'פעיל',
+    'activity_very_active' => 'פעיל מאוד',
+    'body' => 'מבנה גוף',
+    'body_thin' => 'רזה',
+    'body_normal' => 'כמו שצריך',
+    'body_heavy' => 'מלא',
+    'neutered' => 'מסורס/מעוקרת',
+    'allergies_help' => 'רגישויות מופרדות בפסיק. מוצר עם תגית תואמת לא יוצע לכלב.',
 ];

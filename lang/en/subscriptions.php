@@ -54,4 +54,31 @@ return [
 
     'addons' => 'Add-ons',
     'products_help' => 'The products billed each cycle. The list is synced from the store (Products → "Sync from Shopify").',
+
+    'age' => 'Age',
+    'allergies' => 'Allergies',
+    'order_history' => 'Order history',
+    'no_draft_yet' => 'No draft yet',
+    'unknown_variant' => 'Unrecognised variant (:id) — it may have been deleted from the store',
+    'grams_per_day' => 'g/day',
+    'day_pack' => 'day pack',
+
+    'daily_requirement' => 'Daily requirement',
+    'requirement' => 'Needs about :grams g/day (:calories kcal)',
+    'calories_only' => ':calories kcal/day — no matching product in the catalog',
+    'no_recommendation' => 'Cannot compute a recommendation (missing weight/age, or out of range)',
+    'recommended' => 'recommended',
+    'show_all_products' => 'Show the whole catalog (no filtering by this dog)',
+    'picker_help' => 'Options are filtered to what suits this dog, and the recommended one is marked ★. Turn on "show the whole catalog" to override.',
+
+    'activity' => 'Activity level',
+    'activity_inactive' => 'Inactive',
+    'activity_active' => 'Active',
+    'activity_very_active' => 'Very active',
+    'body' => 'Body condition',
+    'body_thin' => 'Thin',
+    'body_normal' => 'Just right',
+    'body_heavy' => 'Heavy',
+    'neutered' => 'Neutered / spayed',
+    'allergies_help' => 'Comma-separated sensitivities. A product tagged with one is never offered to this dog.',
 ];
