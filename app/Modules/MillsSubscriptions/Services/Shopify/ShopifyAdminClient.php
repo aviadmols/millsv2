@@ -32,10 +32,14 @@ class ShopifyAdminClient
      */
     public function graphql(string $query, array $variables = []): array
     {
-        return $this->http()->post($this->baseUrl().'/graphql.json', [
-            'query' => $query,
-            'variables' => $variables,
-        ])->json() ?? [];
+        // An empty PHP array encodes as `[]`, and Shopify rejects that with
+        // "Invalid variables parameter" — it wants an object or nothing at all.
+        $body = ['query' => $query];
+        if ($variables !== []) {
+            $body['variables'] = $variables;
+        }
+
+        return $this->http()->post($this->baseUrl().'/graphql.json', $body)->json() ?? [];
     }
 
     /**

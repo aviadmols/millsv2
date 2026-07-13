@@ -15,6 +15,7 @@ class Dog extends Model
             'selected_variants' => 'array',
             'addons_products' => 'array',
             'double_food' => 'boolean',
+            'neutered' => 'boolean',
             'birth_date' => 'date',
             'age' => 'float',
             'weight' => 'float',

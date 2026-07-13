@@ -13,6 +13,8 @@ class Product extends Model
     {
         return [
             'tags' => 'array',
+            'collections' => 'array',
+            'multiplier' => 'float',
             'shopify_updated_at' => 'datetime',
             'synced_at' => 'datetime',
         ];

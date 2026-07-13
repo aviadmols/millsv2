@@ -10,8 +10,19 @@ use Illuminate\Support\Facades\Log;
 /**
  * Product + media cache (ARCHITECTURE.md §1c). Pulls products/variants from
  * Shopify (incl. featuredImage.url) into the local cache so hot paths never call
- * Shopify live. Mills fields (grams, pack_size, flavor_key) are parsed from the
- * SKU, mirroring v1's ProductCatalogService.
+ * Shopify live.
+ *
+ * The SKU is the catalog's real schema. A subscription SKU reads:
+ *
+ *     SF30 - אריזה יומית של 79 גרם
+ *     ^^ ^^                  ^^
+ *     |  |                   daily grams  → what the recommender matches on
+ *     |  pack size (15 | 30 daily pouches; 30 = one flavour, 15 = two flavours)
+ *     flavour code
+ *
+ * Grams are parsed exactly the way the storefront does it (the digits of the
+ * segment after the first "-", see THEME/assets/quiz-api.js findBestVariantsForProduct),
+ * so the server and the theme can never disagree about a dog's portion size.
  */
 class ProductSyncService
 {
@@ -20,10 +31,12 @@ class ProductSyncService
       products(first: 50, after: $cursor) {
         pageInfo { hasNextPage endCursor }
         nodes {
-          id title handle status tags
+          id title handle status tags productType
           featuredImage { url }
+          multiplier: metafield(namespace: "product", key: "multiplier") { value }
+          collections(first: 10) { nodes { title } }
           variants(first: 100) {
-            nodes { id title sku price image { url } }
+            nodes { id title sku price availableForSale image { url } }
           }
         }
       }
@@ -80,6 +93,9 @@ class ProductSyncService
                 'status' => strtolower((string) ($node['status'] ?? 'active')),
                 'image_url' => $node['featuredImage']['url'] ?? null,
                 'tags' => $node['tags'] ?? [],
+                'multiplier' => self::multiplier($node),
+                'product_type' => $node['productType'] ?? null,
+                'collections' => array_column($node['collections']['nodes'] ?? [], 'title'),
                 'synced_at' => now(),
             ],
         );
@@ -99,35 +115,69 @@ class ProductSyncService
                     'title' => $variant['title'] ?? null,
                     'sku' => $sku !== '' ? $sku : null,
                     'price' => $variant['price'] ?? null,
+                    'available' => (bool) ($variant['availableForSale'] ?? true),
                     'position' => $position++,
                     'image_url' => $variant['image']['url'] ?? ($node['featuredImage']['url'] ?? null),
-                    'grams' => $this->parseGrams($sku),
-                    'pack_size' => $this->parsePackSize($sku),
-                    'flavor_key' => $this->parseFlavorKey($sku),
+                    'grams' => self::parseGrams($sku),
+                    'pack_size' => self::parsePackSize($sku),
+                    'flavor_key' => self::parseFlavorKey($sku),
                     'synced_at' => now(),
                 ],
             );
         }
     }
 
-    private function parseGrams(string $sku): ?int
+    /**
+     * kcal per gram for this food. The recommender divides the dog's daily calories
+     * by it to get the daily grams. Shopify holds it as the `product.multiplier`
+     * metafield; an absent or nonsensical value falls back to 1, exactly as the
+     * storefront does.
+     *
+     * @param  array<string, mixed>  $node
+     */
+    public static function multiplier(array $node): float
     {
-        return preg_match('/(\d{3,5})\s*g/i', $sku, $m) === 1 ? (int) $m[1] : null;
+        $value = (float) ($node['multiplier']['value'] ?? 0);
+
+        return $value > 0 ? $value : 1.0;
     }
 
-    private function parsePackSize(string $sku): ?int
+    /**
+     * Daily grams. Primary rule is the storefront's: take the segment after the
+     * first "-" and keep its digits — `SF30 - אריזה יומית של 79 גרם` → 79. The
+     * Hebrew fallback catches SKUs that omit the dash.
+     */
+    public static function parseGrams(string $sku): ?int
     {
-        if (preg_match('/x\s*(\d{1,3})/i', $sku, $m) === 1) {
-            return (int) $m[1];
+        $sku = trim($sku);
+        if ($sku === '') {
+            return null;
         }
 
-        return null;
+        $parts = explode('-', $sku, 2);
+        if (isset($parts[1])) {
+            $digits = preg_replace('/[^0-9]/', '', $parts[1]);
+            if ($digits !== '' && $digits !== null) {
+                return (int) $digits;
+            }
+        }
+
+        return preg_match('/(\d{2,4})\s*(?:גרם|גר|g)\b/u', $sku, $m) === 1 ? (int) $m[1] : null;
     }
 
-    private function parseFlavorKey(string $sku): ?string
+    /**
+     * Pack size in daily pouches — the digits bound to the flavour code (`SF30` → 30).
+     * Anchored to the prefix on purpose: the storefront's substring match would read
+     * "30" out of a 130-gram SKU.
+     */
+    public static function parsePackSize(string $sku): ?int
     {
-        $parts = preg_split('/[-_\s]+/', trim($sku)) ?: [];
+        return preg_match('/^[A-Za-z]+(15|30)\b/u', trim($sku), $m) === 1 ? (int) $m[1] : null;
+    }
 
-        return $parts[0] !== '' ? strtolower((string) ($parts[0] ?? '')) : null;
+    /** Flavour code — the letters only, so `SF30` and `SF15` are the same flavour. */
+    public static function parseFlavorKey(string $sku): ?string
+    {
+        return preg_match('/^([A-Za-z]+)/', trim($sku), $m) === 1 ? strtolower($m[1]) : null;
     }
 }

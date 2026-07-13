@@ -13,6 +13,7 @@ class ProductVariant extends Model
     {
         return [
             'price' => 'decimal:2',
+            'available' => 'boolean',
             'grams' => 'integer',
             'pack_size' => 'integer',
             'position' => 'integer',
