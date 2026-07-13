@@ -185,12 +185,27 @@ class DraftOrderService
     }
 
     /**
-     * Every variant this subscription bills for: each active dog's flavours and add-ons.
+     * Every variant this subscription bills for.
+     *
+     * THE SINGLE SOURCE for what goes in the box. The draft preview, the paid order and the
+     * charge amount all come through here, so they cannot drift apart — an admin who edits
+     * the upcoming order must not end up charging for one thing and shipping another.
+     *
+     * A hand-edited order (line_items_override) wins over the dogs' products for the cycle
+     * it was made for. Otherwise the lines are derived: each active dog's flavours and
+     * add-ons.
      *
      * @return list<array{variantId: string, quantity: int}>
      */
     public function lineItems(Subscription $subscription): array
     {
+        // NULL means "never edited" → derive from the dogs. An override that exists but is
+        // empty means "the admin removed everything" — falling back to the dogs there would
+        // ship exactly what they just deleted.
+        if ($subscription->line_items_override !== null) {
+            return $this->overrideLineItems($subscription);
+        }
+
         $subscription->loadMissing('dogs');
 
         $items = [];
@@ -213,6 +228,32 @@ class DraftOrderService
                     'quantity' => $dog->double_food ? 2 : 1,
                 ];
             }
+        }
+
+        return $items;
+    }
+
+    /**
+     * @return list<array{variantId: string, quantity: int}>
+     */
+    private function overrideLineItems(Subscription $subscription): array
+    {
+        $items = [];
+
+        foreach ((array) ($subscription->line_items_override ?? []) as $line) {
+            $variantId = ShopifyId::numeric((string) ($line['variant_id'] ?? ''));
+            $quantity = (int) ($line['quantity'] ?? 1);
+
+            // A zero-quantity line is a removal, not a line — a Shopify order with a 0 there
+            // is rejected, and silently sending 1 instead would ship what the admin deleted.
+            if ($variantId === '' || $quantity < 1) {
+                continue;
+            }
+
+            $items[] = [
+                'variantId' => ShopifyId::gid($variantId, 'ProductVariant'),
+                'quantity' => $quantity,
+            ];
         }
 
         return $items;

@@ -22,6 +22,10 @@ class SubscriptionResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
+    // Subscriptions are the reason this app exists — they belong directly under the home
+    // screen, not buried among the supporting resources.
+    protected static ?int $navigationSort = 1;
+
     public static function getNavigationLabel(): string
     {
         return __('subscriptions.title');

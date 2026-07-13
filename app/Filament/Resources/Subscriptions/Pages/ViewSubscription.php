@@ -3,15 +3,25 @@
 namespace App\Filament\Resources\Subscriptions\Pages;
 
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
+use App\Models\ProductVariant;
 use App\Models\Subscription;
+use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Services\SubscriptionActions;
+use App\Modules\MillsSubscriptions\Support\VariantResolver;
+use App\Support\ShopifyId;
+use App\Support\StorefrontToken;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Throwable;
 
@@ -30,6 +40,8 @@ class ViewSubscription extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            $this->customerPortalAction(),
+            $this->editUpcomingOrderAction(),
             $this->pauseAction(),
             $this->resumeAction(),
             $this->postponeAction(),
@@ -37,6 +49,161 @@ class ViewSubscription extends ViewRecord
             $this->buildDraftAction(),
             EditAction::make(),
         ];
+    }
+
+    /**
+     * Open the customer's personal area, exactly as they see it.
+     *
+     * The token is a READ-ONLY preview (30 minutes, GET-only, enforced in
+     * VerifyStorefrontToken). Support staff have no business writing as the customer, and a
+     * tool that can silently change someone's subscription is a liability, not a feature.
+     */
+    private function customerPortalAction(): Action
+    {
+        return Action::make('customerPortal')
+            ->label(__('subscriptions.action_customer_portal'))
+            ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
+            ->color('gray')
+            ->visible(fn (Subscription $record) => ! empty($record->customer?->shopify_customer_id)
+                && config('shopify.storefront_url') !== null)
+            ->url(fn (Subscription $record) => $this->portalUrl($record))
+            ->openUrlInNewTab();
+    }
+
+    private function portalUrl(Subscription $record): ?string
+    {
+        $base = (string) config('shopify.storefront_url', '');
+        $shopifyId = (string) ($record->customer?->shopify_customer_id ?? '');
+
+        if ($base === '' || $shopifyId === '') {
+            return null;
+        }
+
+        SystemLog::info('admin', 'customer portal opened by an admin (read-only)', [
+            'admin_id' => auth()->id(),
+        ], ['subscription_id' => $record->id, 'customer_id' => $record->customer_id]);
+
+        return rtrim($base, '/').'?mills_preview='.urlencode(StorefrontToken::mintPreview($shopifyId));
+    }
+
+    /**
+     * Change what goes out next: quantities, extra products, removals.
+     *
+     * The edit is stored on the SUBSCRIPTION, not just pushed at the Shopify draft — the
+     * draft is a projection, so editing only it would leave the charge still billing the
+     * original lines, and the customer would be charged for one thing and shipped another.
+     *
+     * It is a one-off: after the cycle is charged, the order goes back to the dogs' real
+     * products. A permanent change belongs on the dog.
+     */
+    private function editUpcomingOrderAction(): Action
+    {
+        return Action::make('editUpcomingOrder')
+            ->label(__('subscriptions.action_edit_upcoming'))
+            ->icon(Heroicon::OutlinedPencilSquare)
+            ->color('primary')
+            ->modalHeading(__('subscriptions.action_edit_upcoming'))
+            ->modalDescription(__('subscriptions.action_edit_upcoming_help'))
+            ->modalWidth(Width::TwoExtraLarge)
+            ->visible(fn (Subscription $record) => $record->status !== SubscriptionStatus::CANCELLED)
+            ->fillForm(fn (Subscription $record) => ['lines' => $this->currentLines($record)])
+            ->schema([
+                Repeater::make('lines')
+                    ->label(__('subscriptions.products'))
+                    ->addActionLabel(__('subscriptions.add_product'))
+                    ->reorderable(false)
+                    ->columns(3)
+                    ->schema([
+                        Select::make('variant_id')
+                            ->label(__('subscriptions.product'))
+                            ->options(fn () => self::variantOptions())
+                            ->searchable()
+                            ->required()
+                            ->columnSpan(2),
+                        TextInput::make('quantity')
+                            ->label(__('subscriptions.quantity'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(1)
+                            ->required(),
+                    ]),
+            ])
+            ->action(function (Subscription $record, array $data) {
+                $lines = collect($data['lines'] ?? [])
+                    ->filter(fn ($line) => ! empty($line['variant_id']) && (int) ($line['quantity'] ?? 0) >= 1)
+                    ->map(fn ($line) => [
+                        'variant_id' => (string) $line['variant_id'],
+                        'quantity' => (int) $line['quantity'],
+                    ])
+                    ->values()
+                    ->all();
+
+                if ($lines === []) {
+                    Notification::make()
+                        ->title(__('subscriptions.upcoming_needs_a_line'))
+                        ->warning()
+                        ->send();
+
+                    return;
+                }
+
+                $record->forceFill([
+                    'line_items_override' => $lines,
+                    'line_items_overridden_at' => now(),
+                ])->save();
+
+                try {
+                    // Rebuild the draft so the screen, the amount and the shipment agree.
+                    $draft = $this->actions()->refreshUpcomingOrder($record->fresh());
+                } catch (Throwable $e) {
+                    $this->fail(__('subscriptions.draft_failed'), $e->getMessage());
+
+                    return;
+                }
+
+                SystemLog::warning('admin', 'the upcoming order was edited by hand', [
+                    'admin_id' => auth()->id(),
+                    'lines' => $lines,
+                    'new_total' => $draft['total'] ?? null,
+                ], ['subscription_id' => $record->id, 'customer_id' => $record->customer_id]);
+
+                Notification::make()
+                    ->title(__('subscriptions.upcoming_updated', [
+                        'total' => '₪'.number_format((float) ($draft['total'] ?? 0), 2),
+                    ]))
+                    ->success()
+                    ->send();
+
+                $this->redirect(static::getResource()::getUrl('view', ['record' => $record]));
+            });
+    }
+
+    /**
+     * What the next order currently contains — the override if one was made, otherwise the
+     * lines derived from the dogs.
+     *
+     * @return list<array{variant_id: string, quantity: int}>
+     */
+    private function currentLines(Subscription $subscription): array
+    {
+        return collect(app(DraftOrderService::class)->lineItems($subscription))
+            ->map(fn (array $line) => [
+                'variant_id' => ShopifyId::numeric((string) $line['variantId']),
+                'quantity' => (int) $line['quantity'],
+            ])
+            ->all();
+    }
+
+    /** @return array<string, string> */
+    private static function variantOptions(): array
+    {
+        return ProductVariant::query()
+            ->with('product')
+            ->orderBy('product_id')
+            ->orderBy('position')
+            ->get()
+            ->mapWithKeys(fn (ProductVariant $v) => [(string) $v->shopify_variant_id => VariantResolver::label($v)])
+            ->all();
     }
 
     private function actions(): SubscriptionActions

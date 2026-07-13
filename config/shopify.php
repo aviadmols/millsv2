@@ -47,6 +47,10 @@ return [
     // The single subscription product whose variants are the recurring flavors.
     'subscription_product_id' => env('SHOPIFY_SUBSCRIPTION_PRODUCT_ID', '8499033800792'),
 
+    // The customer's personal area on the storefront. An admin opens it with a READ-ONLY
+    // preview token (StorefrontToken::mintPreview) to see exactly what the customer sees.
+    'storefront_url' => env('STOREFRONT_URL', 'https://millsforpets.com/account'),
+
     // Storefront personal-area token (frozen v1 format; OTP mints the same shape).
     'storefront_token_secret' => env('STOREFRONT_TOKEN_SECRET'),
     'storefront_token_max_age' => (int) env('STOREFRONT_TOKEN_MAX_AGE_SECONDS', 86400),

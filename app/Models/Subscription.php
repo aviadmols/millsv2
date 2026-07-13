@@ -34,6 +34,8 @@ class Subscription extends Model
             'next_charge_amount' => 'decimal:2',
             'next_charge_amount_at' => 'datetime',
             'discount_percent' => 'decimal:2',
+            'line_items_override' => 'array',
+            'line_items_overridden_at' => 'datetime',
             'next_retry_at' => 'datetime',
             'meta' => 'array',
         ];

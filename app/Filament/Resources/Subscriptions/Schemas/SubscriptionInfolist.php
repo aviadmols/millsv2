@@ -2,20 +2,25 @@
 
 namespace App\Filament\Resources\Subscriptions\Schemas;
 
+use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Models\Dog;
 use App\Models\Subscription;
+use App\Modules\MillsSubscriptions\Enums\PaymentState;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Services\Shopify\OrderHistoryService;
 use App\Modules\MillsSubscriptions\Support\SubscriptionPricing;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
-use App\Modules\MillsSubscriptions\Enums\PaymentState;
-use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use Filament\Actions\Action;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ViewEntry;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Throwable;
 
 /**
@@ -35,8 +40,25 @@ class SubscriptionInfolist
     public static function configure(Schema $schema): Schema
     {
         return $schema->components([
+            /*
+             * Two columns, Recharge-style: what is IN the subscription on the left (products,
+             * the next order, the order history — the things you read top to bottom), and the
+             * facts about it on the right (who, what plan, what money), where they stay in
+             * view while you scroll the left.
+             */
+            Grid::make(3)->schema([
+                Group::make()->columnSpan(2)->schema(self::mainColumn()),
+                Group::make()->columnSpan(1)->schema(self::sideColumn()),
+            ]),
+        ]);
+    }
+
+    /** @return list<mixed> */
+    private static function sideColumn(): array
+    {
+        return [
             Section::make(__('subscriptions.owner_details'))
-                ->columns(2)
+                ->columns(1)
                 ->schema([
                     TextEntry::make('customer_name')
                         ->label(__('subscriptions.name'))
@@ -57,7 +79,7 @@ class SubscriptionInfolist
                 ]),
 
             Section::make(__('subscriptions.subscription_details'))
-                ->columns(4)
+                ->columns(2)
                 ->schema([
                     TextEntry::make('status')
                         ->label(__('subscriptions.status'))
@@ -77,31 +99,51 @@ class SubscriptionInfolist
                     TextEntry::make('frequency_months')
                         ->label(__('subscriptions.frequency'))
                         ->formatStateUsing(fn (int $state) => $state === 2 ? __('subscriptions.every_2_months') : __('subscriptions.monthly')),
+                    TextEntry::make('discount_percent')
+                        ->label(__('subscriptions.discount_percent'))
+                        ->suffix('%')
+                        ->placeholder('0'),
                     TextEntry::make('next_charge_at')
                         ->label(__('subscriptions.next_charge'))
                         ->dateTime('Y-m-d')
                         ->placeholder('—'),
-                ]),
-
-            // The upcoming order: what ships next, and the amount PayMe will be asked for.
-            Section::make(__('subscriptions.upcoming_order'))
-                ->columns(2)
-                ->schema([
                     TextEntry::make('next_charge_amount')
                         ->label(__('subscriptions.next_charge_amount'))
                         ->money('ILS')
                         ->weight('bold')
                         ->placeholder(__('subscriptions.amount_unknown'))
                         ->helperText(fn (Subscription $record) => self::amountHint($record)),
-                    TextEntry::make('next_charge_at')
-                        ->label(__('subscriptions.next_charge'))
-                        ->dateTime('Y-m-d')
-                        ->placeholder('—'),
+                ]),
+        ];
+    }
 
-                    TextEntry::make('discount_percent')
-                        ->label(__('subscriptions.discount_percent'))
-                        ->suffix('%')
-                        ->placeholder('0'),
+    /** @return list<mixed> */
+    private static function mainColumn(): array
+    {
+        return [
+            // The upcoming order: what ships next, and the amount PayMe will be asked for.
+            Section::make(__('subscriptions.upcoming_order'))
+                ->columns(1)
+                // The edit lives where the thing being edited is, not only in the page header.
+                ->headerActions([
+                    Action::make('editUpcomingOrderInline')
+                        ->label(__('subscriptions.edit'))
+                        ->icon(Heroicon::OutlinedPencilSquare)
+                        ->color('gray')
+                        ->url(fn (Subscription $record) => SubscriptionResource::getUrl('view', [
+                            'record' => $record,
+                            'action' => 'editUpcomingOrder',
+                        ])),
+                ])
+                ->schema([
+                    TextEntry::make('line_items_overridden_at')
+                        ->hiddenLabel()
+                        ->badge()
+                        ->color('warning')
+                        ->state(__('subscriptions.edited_by_hand'))
+                        // A hand-edited order must never look like a normal one — otherwise the
+                        // next person to read this screen is misled about what will ship.
+                        ->visible(fn (Subscription $record) => ! empty($record->line_items_override)),
 
                     ViewEntry::make('upcoming_order')
                         ->hiddenLabel()
@@ -112,6 +154,15 @@ class SubscriptionInfolist
 
             // Each dog, its computed requirement, and the products it is billed for.
             Section::make(__('subscriptions.dogs').' — '.__('subscriptions.products'))
+                ->headerActions([
+                    Action::make('editDogs')
+                        ->label(__('subscriptions.edit'))
+                        ->icon(Heroicon::OutlinedPencilSquare)
+                        ->color('gray')
+                        // Changing a dog's food rebuilds the upcoming order automatically
+                        // (DogObserver) — the screen, the charge and the box stay in step.
+                        ->url(fn (Subscription $record) => SubscriptionResource::getUrl('edit', ['record' => $record])),
+                ])
                 ->schema([
                     RepeatableEntry::make('dogs')
                         ->hiddenLabel()
@@ -182,7 +233,7 @@ class SubscriptionInfolist
                                 ->color(fn ($state) => $state ? 'primary' : 'gray'),
                         ]),
                 ]),
-        ]);
+        ];
     }
 
     /**

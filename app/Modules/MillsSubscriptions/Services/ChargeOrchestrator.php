@@ -277,7 +277,18 @@ class ChargeOrchestrator
      */
     private function createShopifyOrder(Subscription $subscription, PaymentLedger $ledger): void
     {
+        // The order goes out with whatever the upcoming order actually said — including a
+        // hand-edited one. This must happen BEFORE the override is cleared.
         app(OrderCreationService::class)->createPaidOrder($subscription, $ledger);
+
+        // A hand-edited order was a one-off for the cycle just charged. The next cycle goes
+        // back to the dogs' real products; a permanent change belongs on the dog.
+        if (! empty($subscription->line_items_override)) {
+            $subscription->forceFill([
+                'line_items_override' => null,
+                'line_items_overridden_at' => null,
+            ])->save();
+        }
 
         try {
             app(DraftOrderService::class)->refresh($subscription->fresh());

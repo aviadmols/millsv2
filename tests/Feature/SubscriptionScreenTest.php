@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Services\SubscriptionActions;
 use App\Modules\MillsSubscriptions\Support\SubscriptionPricing;
 use App\Support\ShopifyImage;
@@ -276,12 +277,76 @@ class SubscriptionScreenTest extends TestCase
     /** @return array<string, mixed> */
     private function draftInput(Subscription $subscription): array
     {
-        $service = app(\App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService::class);
+        $service = app(DraftOrderService::class);
 
         $method = new \ReflectionMethod($service, 'input');
         $method->setAccessible(true);
 
         return $method->invoke($service, $subscription);
+    }
+
+    // --- a hand-edited upcoming order ----------------------------------------
+
+    public function test_an_edited_upcoming_order_is_what_actually_gets_billed_and_shipped(): void
+    {
+        [, $subscription, , $variant] = $this->scenario();
+
+        $drafts = app(DraftOrderService::class);
+
+        // By default the order is derived from the dog's products: one line, quantity 1.
+        $this->assertSame(1, count($drafts->lineItems($subscription)));
+        $this->assertSame(1, $drafts->lineItems($subscription)[0]['quantity']);
+
+        // The admin doubles it for this cycle.
+        $subscription->forceFill([
+            'line_items_override' => [['variant_id' => (string) $variant->shopify_variant_id, 'quantity' => 3]],
+            'line_items_overridden_at' => now(),
+        ])->save();
+
+        $lines = $drafts->lineItems($subscription->fresh());
+
+        // THE POINT: the draft preview, the charge amount and the paid order all read from
+        // this one method. If the override only reached the Shopify draft, the customer
+        // would be charged for one thing and shipped another.
+        $this->assertCount(1, $lines);
+        $this->assertSame(3, $lines[0]['quantity']);
+        $this->assertStringContainsString((string) $variant->shopify_variant_id, $lines[0]['variantId']);
+    }
+
+    public function test_a_removed_line_is_actually_removed_not_silently_shipped_as_one(): void
+    {
+        [, $subscription, , $variant] = $this->scenario();
+
+        $subscription->forceFill([
+            'line_items_override' => [
+                ['variant_id' => (string) $variant->shopify_variant_id, 'quantity' => 0],
+            ],
+        ])->save();
+
+        $lines = app(DraftOrderService::class)
+            ->lineItems($subscription->fresh());
+
+        // A zero-quantity line means "take it out". Defaulting it to 1 would ship exactly
+        // what the admin just deleted.
+        $this->assertSame([], $lines);
+    }
+
+    public function test_the_override_falls_back_to_the_dogs_products_when_cleared(): void
+    {
+        [, $subscription, , $variant] = $this->scenario();
+
+        $subscription->forceFill([
+            'line_items_override' => [['variant_id' => (string) $variant->shopify_variant_id, 'quantity' => 5]],
+        ])->save();
+
+        $this->assertSame(5, app(DraftOrderService::class)
+            ->lineItems($subscription->fresh())[0]['quantity']);
+
+        // Once the one-off cycle is over, the order goes back to the dog's real products.
+        $subscription->forceFill(['line_items_override' => null])->save();
+
+        $this->assertSame(1, app(DraftOrderService::class)
+            ->lineItems($subscription->fresh())[0]['quantity']);
     }
 
     // --- the guarded state machine is not bypassed ---------------------------

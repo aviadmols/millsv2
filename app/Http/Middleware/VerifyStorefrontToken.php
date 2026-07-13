@@ -40,7 +40,23 @@ class VerifyStorefrontToken
             return $this->deny('missing_token');
         }
 
-        $subject = StorefrontToken::verify($token);
+        // An admin previewing a customer's personal area gets a `pv.` token: short-lived
+        // and READ-ONLY. Support staff have no business writing as the customer, and a
+        // tool that can silently alter someone's subscription is a liability.
+        if (StorefrontToken::isPreview($token)) {
+            $subject = StorefrontToken::verifyPreview($token);
+
+            if ($subject === null) {
+                return $this->deny('invalid_token');
+            }
+
+            if (! $request->isMethod('GET')) {
+                return $this->deny('preview_read_only', 403);
+            }
+        } else {
+            $subject = StorefrontToken::verify($token);
+        }
+
         if ($subject === null) {
             return $this->deny('invalid_token');
         }

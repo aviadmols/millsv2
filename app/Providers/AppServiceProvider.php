@@ -5,11 +5,13 @@ namespace App\Providers;
 use App\Domain\Billing\Contracts\PaymentGateway;
 use App\Models\AppSetting;
 use App\Models\CronRun;
+use App\Models\Dog;
 use App\Models\MailSetting;
 use App\Modules\MillsSubscriptions\Services\PayMe\PaymeClient;
 use App\Modules\MillsSubscriptions\Services\PayMe\PayMeGateway;
 use App\Modules\MillsSubscriptions\Services\Sms\Sms019Sender;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
+use App\Observers\DogObserver;
 use BezhanSalleh\LanguageSwitch\LanguageSwitch;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
@@ -32,6 +34,13 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        /*
+         * The upcoming order IS the next charge — its total is what PayMe is asked for. So a
+         * dog whose food changes without the order being rebuilt leaves the screen showing
+         * one product, the customer charged for another, and the box holding a third.
+         */
+        Dog::observe(DogObserver::class);
+
         // Behind Railway's TLS-terminating proxy the container sees HTTP; force
         // HTTPS URL generation so assets/links aren't Mixed-Content-blocked.
         if ($this->app->isProduction() || str_starts_with((string) config('app.url'), 'https://')) {
