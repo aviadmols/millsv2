@@ -37,6 +37,13 @@ class ChargeOrchestratorTest extends TestCase
                     ? GatewayResult::success($this->txId, ['payme_status_code' => 0])
                     : GatewayResult::failure('declined', 'Card declined', ['payme_status_code' => 5]);
             }
+
+            public function lookup(string $idempotencyKey): GatewayResult
+            {
+                return $this->succeed
+                    ? GatewayResult::success($this->txId)
+                    : GatewayResult::failure('declined', 'Card declined');
+            }
         };
 
         return new ChargeOrchestrator($gateway);

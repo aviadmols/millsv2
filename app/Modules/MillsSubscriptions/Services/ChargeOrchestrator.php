@@ -75,11 +75,44 @@ class ChargeOrchestrator
                 return [null, ['success' => true, 'status' => 'already_charged']];
             }
 
+            /*
+             * THE LEASE.
+             *
+             * A `pending` row means a charge for this key is either still in flight or
+             * died without an answer — so we DO NOT KNOW whether the card was debited.
+             * Charging again on top of that is exactly how a customer is billed twice.
+             *
+             * The unique index on idempotency_key only ever prevented a duplicate ROW; it
+             * prevented nothing about the money. This does. A pending row blocks every
+             * further attempt until mills:reconcile-payments has asked PayMe what really
+             * happened and resolved it to succeeded or failed.
+             *
+             * A `failed` / `retry_scheduled` row is different: PayMe told us no, so the
+             * money definitely did not move and a retry is safe.
+             */
+            $existing = Ledger::find($idempotencyKey);
+
+            if ($existing !== null && $existing->status === LedgerStatus::PENDING) {
+                SystemLog::error('billing', 'charge blocked — a previous attempt has no known outcome', [
+                    'ledger_id' => $existing->id,
+                    'idempotency_key' => $idempotencyKey,
+                    'opened_at' => $existing->created_at?->toIso8601String(),
+                ], ['subscription_id' => $locked->id, 'customer_id' => $locked->customer_id]);
+
+                return [null, ['success' => false, 'status' => 'reconciliation_required']];
+            }
+
             $row = Ledger::open($context, $idempotencyKey, $amount, config('billing.currency', 'ILS'), [
                 'subscription_id' => $locked->id,
                 'customer_id' => $locked->customer_id,
                 'payment_method_id' => $method->id,
             ]);
+
+            // A retry of a definite decline reopens the SAME row — put it back into
+            // `pending` so it leases the charge exactly like a first attempt would.
+            if ($row->status === LedgerStatus::RETRY_SCHEDULED) {
+                Ledger::transition($row, LedgerStatus::PENDING);
+            }
 
             return [$row, ['amount' => $amount, 'method_id' => $method->id]];
         });
@@ -98,9 +131,58 @@ class ChargeOrchestrator
             (string) $ledger->idempotency_key,
         );
 
-        return $result->success
-            ? $this->onSuccess($subscription, $ledger, $result->transactionId, $result->raw)
-            : $this->onFailure($subscription, $ledger, $result->failureCode, $result->failureMessage, $result->raw);
+        if ($result->success) {
+            return $this->onSuccess($subscription, $ledger, $result->transactionId, $result->raw);
+        }
+
+        // PayMe never answered. The card MAY already be debited, so the one thing we must
+        // not do is decide it failed and try again — that is the double charge.
+        if ($result->ambiguous) {
+            return $this->onAmbiguous($subscription, $ledger, $result->failureMessage, $result->raw);
+        }
+
+        return $this->onFailure($subscription, $ledger, $result->failureCode, $result->failureMessage, $result->raw);
+    }
+
+    /**
+     * The outcome is UNKNOWN.
+     *
+     * The ledger row is deliberately LEFT `pending`. That is not an oversight — a pending
+     * row is the lease, and it now blocks every further charge for this key until
+     * mills:reconcile-payments asks PayMe what actually happened. No retry is scheduled,
+     * because a retry is precisely the wrong move: if the card was debited, retrying takes
+     * the money a second time, and the ledger would show only one charge.
+     *
+     * @param  array<string,mixed>  $raw
+     * @return array{success: bool, status: string, ledger_id: int, error: string}
+     */
+    private function onAmbiguous(Subscription $subscription, PaymentLedger $ledger, ?string $message, array $raw): array
+    {
+        // Record what we know WITHOUT moving the row out of pending.
+        $ledger->forceFill([
+            'failure_code' => 'ambiguous',
+            'failure_message' => $message,
+            'raw_response_masked' => $raw,
+        ])->save();
+
+        SystemLog::error('billing', 'PayMe did not answer — the charge outcome is UNKNOWN and must be reconciled', [
+            'ledger_id' => $ledger->id,
+            'idempotency_key' => $ledger->idempotency_key,
+            'amount' => (string) $ledger->amount,
+            'message' => $message,
+        ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+
+        Timeline::record(Timeline::KIND_NOTE, [
+            'event' => 'charge_outcome_unknown',
+            'ledger_id' => $ledger->id,
+        ], $subscription->id, $subscription->customer_id);
+
+        return [
+            'success' => false,
+            'status' => 'ambiguous',
+            'ledger_id' => $ledger->id,
+            'error' => (string) $message,
+        ];
     }
 
     /**

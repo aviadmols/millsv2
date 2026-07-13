@@ -28,4 +28,18 @@ interface PaymentGateway
         string $idempotencyKey,
         array $opts = [],
     ): GatewayResult;
+
+    /**
+     * Ask the gateway what actually happened to a charge whose answer we never got.
+     *
+     * This is the ONLY way out of an ambiguous outcome. When a charge times out, the card
+     * may or may not have been debited — and the one thing we must never do is assume. The
+     * idempotency key was sent to the gateway as its own reference, so the charge can be
+     * looked up by it rather than guessed at.
+     *
+     * Returns success (it went through), failure (it did not), or ambiguous again (the
+     * gateway still cannot tell us — in which case the money stays in limbo and a human
+     * must look, which is strictly better than charging twice).
+     */
+    public function lookup(string $idempotencyKey): GatewayResult;
 }

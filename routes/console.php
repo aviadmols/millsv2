@@ -17,6 +17,18 @@ Schedule::command('mills:dispatch-due')
     ->withoutOverlapping()
     ->onOneServer();
 
+/*
+ * Resolve charges whose answer PayMe never gave us.
+ *
+ * A pending ledger row BLOCKS its subscription from being charged again — deliberately,
+ * because the card may already have been debited. This is the only thing that unblocks it,
+ * so it must run as reliably as the dispatcher itself: money sits in limbo until it does.
+ */
+Schedule::command('mills:reconcile-payments')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Log retention — delete system_logs / cron_runs older than
 // config('mills.logging.retention_days') (default 60 days).
 Schedule::command('logs:prune')
