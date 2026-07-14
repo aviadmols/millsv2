@@ -113,6 +113,7 @@ return [
     'charge_status_no_amount' => 'The charge amount is unknown.',
     'charge_status_already_charged' => 'This has already been charged today.',
     'charge_status_kill_switch' => 'Billing is switched off system-wide.',
+    'charge_status_too_far_behind' => 'This subscription is more than a full cycle behind. Charging it now would bill the customer for cycles they never received. Move the next charge date forward first.',
 
     'action_build_draft' => 'Build upcoming order',
     'action_build_draft_confirm' => "A draft order is created in Shopify from the subscription's products, and the next charge amount is set from its total.",

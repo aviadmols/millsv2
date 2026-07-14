@@ -54,6 +54,23 @@ class ChargeOrchestrator
                 return [null, ['success' => false, 'status' => 'needs_card_update']];
             }
 
+            /*
+             * A subscription more than one whole cycle behind never charges automatically.
+             *
+             * The dispatcher already refuses to queue these, but this is the wall that
+             * actually holds: a job queued before the subscription fell behind, a retry, an
+             * admin re-dispatch — any of them would otherwise walk straight into billing a
+             * customer for months of boxes that were never shipped, one cycle every five
+             * minutes. A human decides what happens to these.
+             *
+             * `charge now` from the admin is deliberately NOT exempt: if support wants to bill
+             * a lapsed customer, they should move the date forward first and see what they are
+             * doing.
+             */
+            if ($locked->isTooFarBehindToCharge()) {
+                return [null, ['success' => false, 'status' => 'too_far_behind']];
+            }
+
             $method = $locked->customer?->activePaymentMethod();
             if ($method === null) {
                 // Fail closed: no saved card → require a card update, don't charge.

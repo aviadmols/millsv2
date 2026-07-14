@@ -41,6 +41,7 @@ class DispatchDueSubscriptionsCommand extends Command
         $cutoff = now()->addMinutes((int) config('billing.dispatch_window_minutes', 0));
         $chunk = (int) $this->option('chunk');
         $dispatched = 0;
+        $heldBack = 0;
 
         Subscription::query()
             ->where('status', SubscriptionStatus::ACTIVE->value)
@@ -51,8 +52,28 @@ class DispatchDueSubscriptionsCommand extends Command
                 $q->whereNull('next_retry_at')->orWhere('next_retry_at', '<=', now());
             })
             ->orderBy('id')
-            ->chunkById($chunk, function ($subscriptions) use (&$dispatched) {
+            ->chunkById($chunk, function ($subscriptions) use (&$dispatched, &$heldBack) {
                 foreach ($subscriptions as $subscription) {
+                    /*
+                     * A subscription more than one whole cycle behind is NOT charged.
+                     *
+                     * A successful charge advances next_charge_at from the OLD due date, so a
+                     * subscription stuck two months back would be charged for the first missed
+                     * cycle, land on a date that is STILL in the past, and be charged again
+                     * five minutes later — two months of billing in ten minutes, for boxes
+                     * that were never shipped. It waits for a person instead.
+                     */
+                    if ($subscription->isTooFarBehindToCharge()) {
+                        $heldBack++;
+
+                        SystemLog::warning('cron', 'a subscription is too far behind to charge automatically', [
+                            'next_charge_at' => $subscription->next_charge_at->toDateString(),
+                            'frequency_months' => $subscription->frequency_months,
+                        ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+
+                        continue;
+                    }
+
                     // Pin the idempotency key to THIS cycle's due date so a
                     // re-dispatch for the same cycle collapses (the key is stable
                     // even after next_charge_at advances on success).
@@ -68,8 +89,13 @@ class DispatchDueSubscriptionsCommand extends Command
         Cache::forever('billing.dispatch.last_run', now());
         $this->info("Dispatched {$dispatched} charge job(s).");
 
+        if ($heldBack > 0) {
+            $this->warn("{$heldBack} subscription(s) held back — too far behind to charge automatically.");
+        }
+
         SystemLog::info('cron', "billing dispatch ran — {$dispatched} charge(s) queued", [
             'dispatched' => $dispatched,
+            'held_back' => $heldBack,
             'cutoff' => $cutoff->toIso8601String(),
         ]);
 

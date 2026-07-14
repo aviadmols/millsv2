@@ -58,6 +58,11 @@ return [
     'health_worker_failed' => ':count jobs failed in the last 24 hours',
     'health_worker_failed_help' => 'Charges were attempted and threw. Check the failed_jobs table before they are retried.',
 
+    'health_behind' => 'Subscriptions held back',
+    'health_behind_ok' => 'None — every subscription is on schedule',
+    'health_behind_count' => ':count subscriptions are more than a cycle behind',
+    'health_behind_help' => 'They are NOT being charged, on purpose: billing them would take one missed cycle every five minutes until it caught up — months of boxes that were never shipped. Open each one and move the next charge date forward, or cancel it.',
+
     'health_payments' => 'Stuck charges',
     'health_payments_ok' => 'No charges awaiting an answer',
     'health_payments_stuck' => ':count charges with no answer from PayMe',

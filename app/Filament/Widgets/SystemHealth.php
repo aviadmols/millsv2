@@ -6,7 +6,10 @@ use App\Http\Controllers\Api\CronApiController;
 use App\Models\CronRun;
 use App\Models\PaymentLedger;
 use App\Models\ShopifyConnection;
+use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
+use App\Modules\MillsSubscriptions\Enums\PaymentState;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -41,6 +44,7 @@ class SystemHealth extends Widget
             'checks' => [
                 $this->billingRan(),
                 $this->queueDrained(),
+                $this->tooFarBehind(),
                 $this->stuckPayments(),
                 $this->shopify(),
                 $this->payme(),
@@ -135,6 +139,38 @@ class SystemHealth extends Widget
                 ? __('dashboard.health_billing_ran', ['when' => $lastRun->diffForHumans()])
                 : __('dashboard.health_billing_off'),
             __('dashboard.health_billing_at', ['time' => $lastRun->format('Y-m-d H:i')]),
+        );
+    }
+
+    /**
+     * Subscriptions the biller has deliberately refused to charge.
+     *
+     * They are more than a whole cycle behind, so charging them automatically would bill the
+     * customer for months of boxes that were never shipped — one cycle every five minutes
+     * until it caught up. They wait here instead, and someone has to decide.
+     *
+     * Silence would be the worst outcome: a subscription that quietly stops being billed and
+     * never says so is indistinguishable from one that is being billed.
+     *
+     * @return array<string, mixed>
+     */
+    private function tooFarBehind(): array
+    {
+        $count = Subscription::query()
+            ->where('status', SubscriptionStatus::ACTIVE->value)
+            ->where('payment_state', PaymentState::PAYME->value)
+            ->tooFarBehind()
+            ->count();
+
+        if ($count === 0) {
+            return $this->check(__('dashboard.health_behind'), 'ok', __('dashboard.health_behind_ok'));
+        }
+
+        return $this->check(
+            __('dashboard.health_behind'),
+            'warning',
+            __('dashboard.health_behind_count', ['count' => $count]),
+            __('dashboard.health_behind_help'),
         );
     }
 

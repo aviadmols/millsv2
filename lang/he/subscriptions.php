@@ -113,6 +113,7 @@ return [
     'charge_status_no_amount' => 'לא ידוע סכום החיוב.',
     'charge_status_already_charged' => 'החיוב כבר בוצע היום.',
     'charge_status_kill_switch' => 'החיובים מושבתים במערכת.',
+    'charge_status_too_far_behind' => 'המנוי בפיגור של יותר ממחזור שלם. חיוב עכשיו יגבה מהלקוח על מחזורים שמעולם לא קיבל. הזז קודם את תאריך החיוב הבא.',
 
     'action_build_draft' => 'צור הזמנה קרובה',
     'action_build_draft_confirm' => 'תיווצר טיוטת הזמנה ב-Shopify מהמוצרים של המנוי, וסכום החיוב הבא יתעדכן לפיה.',
