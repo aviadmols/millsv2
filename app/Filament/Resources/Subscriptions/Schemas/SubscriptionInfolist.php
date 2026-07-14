@@ -40,18 +40,28 @@ class SubscriptionInfolist
 {
     public static function configure(Schema $schema): Schema
     {
-        return $schema->components([
+        return $schema
             /*
-             * Two columns, Recharge-style: what is IN the subscription on the left (products,
-             * the next order, the order history — the things you read top to bottom), and the
-             * facts about it on the right (who, what plan, what money), where they stay in
-             * view while you scroll the left.
+             * The infolist's own schema is ONE column, so the grid below gets the whole width.
+             *
+             * Filament defaults a resource page's schema to two columns. Left alone, the grid
+             * becomes a single cell inside it and the entire screen is crammed into the left
+             * half — the 2/3 + 1/3 split then happens inside that half, which is exactly what
+             * it looked like.
              */
-            Grid::make(3)->schema([
-                Group::make()->columnSpan(2)->schema(self::mainColumn()),
-                Group::make()->columnSpan(1)->schema(self::sideColumn()),
-            ]),
-        ]);
+            ->columns(1)
+            ->components([
+                /*
+                 * Two columns, Recharge-style: what is IN the subscription on the left
+                 * (products, the next order, the order history — the things you read top to
+                 * bottom), and the facts about it on the right (who, what plan, what money),
+                 * where they stay in view while you scroll the left.
+                 */
+                Grid::make(3)->schema([
+                    Group::make()->columnSpan(2)->schema(self::mainColumn()),
+                    Group::make()->columnSpan(1)->schema(self::sideColumn()),
+                ]),
+            ]);
     }
 
     /** @return list<mixed> */

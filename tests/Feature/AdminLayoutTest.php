@@ -46,9 +46,42 @@ class AdminLayoutTest extends TestCase
         return $subscription;
     }
 
+    /**
+     * The columns of the page's own schema container.
+     *
+     * Getting this selector right is the whole test. The first attempt matched the outer page
+     * WRAPPER — which carries no `lg:fi-grid-cols` class and is therefore always one column —
+     * so it passed whatever the schema underneath it did. That false green is why a real fix
+     * to the view screen was reverted as "a no-op", and the bug shipped.
+     *
+     * The schema container is the first div that actually declares responsive columns.
+     */
+    private function schemaColumns(string $html): string
+    {
+        preg_match('/<div class="fi-sc[^"]*lg:fi-grid-cols"[^>]*style="([^"]*)"/', $html, $m);
+
+        return $m[1] ?? '(no schema container found)';
+    }
+
     public function test_the_panel_is_not_capped_to_a_narrow_column(): void
     {
         $this->assertSame(Width::Full, Filament::getPanel('admin')->getMaxContentWidth());
+    }
+
+    public function test_the_view_screen_is_not_crammed_into_half_the_window(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $html = $this->get(SubscriptionResource::getUrl('view', ['record' => $this->subscription()]))
+            ->assertOk()
+            ->getContent();
+
+        $columns = $this->schemaColumns($html);
+
+        // repeat(2) here means the whole 2/3 + 1/3 layout is squeezed into the left half.
+        $this->assertStringNotContainsString('repeat(2', $columns);
+        // And the layout it exists to render is actually there.
+        $this->assertStringContainsString('repeat(3', $html);
     }
 
     public function test_the_edit_form_lays_its_sections_out_full_width(): void
@@ -59,15 +92,9 @@ class AdminLayoutTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        /*
-         * The FORM's own schema container — the one wrapping the sections, inside <form>. A
-         * `repeat(2, …)` there is the bug: each Section becomes one cell of two. (Deeper down
-         * a repeat(2) is correct and expected — that is a section laying out its own fields.)
-         */
-        preg_match('/<form[^>]*>.*?<div class="fi-sc[^"]*"[^>]*style="([^"]*)"/s', $html, $m);
-
-        $this->assertNotEmpty($m, 'the form schema container was not found in the page');
-        $this->assertStringNotContainsString('repeat(2', $m[1]);
+        // A repeat(2) DEEPER down is correct — that is a section laying out its own fields.
+        // It is the schema container itself that must not halve the page.
+        $this->assertStringNotContainsString('repeat(2', $this->schemaColumns($html));
     }
 
     /**
