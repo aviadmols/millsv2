@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Dogs\Schemas;
 
+use App\Filament\Forms\AllergySelect;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -27,7 +28,7 @@ class DogForm
                     ->numeric(),
                 TextInput::make('weight')
                     ->numeric(),
-                Textarea::make('allergies')
+                AllergySelect::make()
                     ->columnSpanFull(),
                 TextInput::make('activity')
                     ->numeric(),

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Subscriptions\Schemas;
 
+use App\Filament\Forms\AllergySelect;
 use App\Models\Dog;
 use App\Models\ProductVariant;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
@@ -118,11 +119,7 @@ class SubscriptionForm
                                     ->live(),
                                 Toggle::make('neutered')->label(__('subscriptions.neutered'))->live(),
 
-                                TextInput::make('allergies')
-                                    ->label(__('subscriptions.allergies'))
-                                    ->helperText(__('subscriptions.allergies_help'))
-                                    ->columnSpan(2)
-                                    ->live(debounce: 700),
+                                AllergySelect::make()->columnSpan(2),
 
                                 Toggle::make('show_all_products')
                                     ->label(__('subscriptions.show_all_products'))

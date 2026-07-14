@@ -330,10 +330,127 @@ class DogFoodRecommender
         return false;
     }
 
-    /** @return list<string> */
+    /**
+     * The sensitivities worth offering for THIS dog: the classes carried by the foods it
+     * could otherwise eat.
+     *
+     * Free text could never work here. A sensitivity only does anything if it matches a
+     * class on a product — "chicken" typed in English, or "עוף " with a stray space, or a
+     * flavour this dog was never eligible for, excludes precisely nothing while looking
+     * like it excludes something. Offering only the classes actually present in the dog's
+     * own eligible set means every option removes a real product, and the recommendation
+     * visibly changes when one is picked.
+     *
+     * The structural classes (micro-kibble, super-food, senior, …) are left out: they are
+     * the engine's own size/age rules, not things a dog is allergic to.
+     *
+     * @return array<string, string> the stored value => the label (they are the same tag)
+     */
+    public function allergenOptions(?Dog $dog = null): array
+    {
+        $products = ($dog !== null && $this->hasSize($dog))
+            ? $this->eligibleProducts($this->ignoringAllergies($dog))
+            : $this->foodProducts();
+
+        $found = [];
+
+        foreach ($products as $product) {
+            $classes = array_merge([(string) $product->product_type], (array) ($product->tags ?? []));
+
+            foreach ($classes as $class) {
+                $class = trim((string) $class);
+
+                if ($class === '' || $this->isStructural($class)) {
+                    continue;
+                }
+
+                // Keyed by the normalised form so two spellings of one class collapse,
+                // but the RAW tag is what gets stored — hasClass() normalises both sides.
+                $found[$this->normalise($class)] = $class;
+            }
+        }
+
+        $options = array_combine(array_values($found), array_values($found)) ?: [];
+
+        // A sensitivity already recorded must never vanish from the list, or opening the
+        // form would silently drop it — and the dog would be offered the food it reacts to.
+        foreach ($this->allergyList($dog ?? new Dog) as $current) {
+            $options[$current] ??= $current;
+        }
+
+        ksort($options);
+
+        return $options;
+    }
+
+    /** Every dog food in the catalog, regardless of this dog's size or age. */
+    private function foodProducts(): Collection
+    {
+        return Product::query()
+            ->where('status', 'active')
+            ->get()
+            ->filter(function (Product $product) {
+                if (! $this->inDogsCollection($product)) {
+                    return false;
+                }
+
+                foreach (self::ALWAYS_EXCLUDED as $class) {
+                    if ($this->hasClass($product, $class)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            })
+            ->values();
+    }
+
+    /** The engine's own size/age rules — not sensitivities. */
+    private function isStructural(string $class): bool
+    {
+        $structural = array_merge(
+            [self::CLASS_MICRO, self::CLASS_SUPER_FOOD, self::CLASS_SENIOR, self::CLASS_DOGS_COLLECTION],
+            self::ALWAYS_EXCLUDED,
+        );
+
+        foreach ($structural as $known) {
+            if ($this->normalise($class) === $this->normalise($known)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasSize(Dog $dog): bool
+    {
+        return (float) ($dog->weight ?? 0) > 0;
+    }
+
+    /** A copy of the dog with no sensitivities — used to ask what it COULD eat. */
+    private function ignoringAllergies(Dog $dog): Dog
+    {
+        $copy = clone $dog;
+        $copy->allergies = null;
+
+        return $copy;
+    }
+
+    /**
+     * @return list<string>
+     */
     private function allergyList(Dog $dog): array
     {
-        $raw = trim((string) ($dog->allergies ?? ''));
+        $raw = $dog->allergies ?? '';
+
+        // The admin picker hands back an array; the storefront and the v1 import a
+        // comma-separated string. Both are the same list.
+        if (is_array($raw)) {
+            return array_values(array_filter(array_map(fn ($v) => trim((string) $v), $raw)));
+        }
+
+        $raw = trim((string) $raw);
+
         if ($raw === '') {
             return [];
         }

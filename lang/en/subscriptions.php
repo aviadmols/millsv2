@@ -53,23 +53,23 @@ return [
     'transaction' => 'Transaction',
 
     'addons' => 'Add-ons',
-    'products_help' => 'The products billed each cycle. The list is synced from the store (Products â†’ "Sync from Shopify").',
+    'products_help' => 'The products billed each cycle. The list is synced from the store (Products → "Sync from Shopify").',
 
     'age' => 'Age',
     'allergies' => 'Allergies',
     'order_history' => 'Order history',
     'no_draft_yet' => 'No draft yet',
-    'unknown_variant' => 'Unrecognised variant (:id) â€” it may have been deleted from the store',
+    'unknown_variant' => 'Unrecognised variant (:id) — it may have been deleted from the store',
     'grams_per_day' => 'g/day',
     'day_pack' => 'day pack',
 
     'daily_requirement' => 'Daily requirement',
     'requirement' => 'Needs about :grams g/day (:calories kcal)',
-    'calories_only' => ':calories kcal/day â€” no matching product in the catalog',
+    'calories_only' => ':calories kcal/day — no matching product in the catalog',
     'no_recommendation' => 'Cannot compute a recommendation (missing weight/age, or out of range)',
     'recommended' => 'recommended',
     'show_all_products' => 'Show the whole catalog (no filtering by this dog)',
-    'picker_help' => 'Options are filtered to what suits this dog, and the recommended one is marked â˜…. Turn on "show the whole catalog" to override.',
+    'picker_help' => 'Options are filtered to what suits this dog, and the recommended one is marked ★. Turn on "show the whole catalog" to override.',
 
     'activity' => 'Activity level',
     'activity_inactive' => 'Inactive',
@@ -80,12 +80,12 @@ return [
     'body_normal' => 'Just right',
     'body_heavy' => 'Heavy',
     'neutered' => 'Neutered / spayed',
-    'allergies_help' => 'Comma-separated sensitivities. A product tagged with one is never offered to this dog.',
+    'allergies_help' => 'Only what the catalog can actually act on is offered here, filtered to the foods this dog could otherwise eat. A product carrying a selected sensitivity is never offered to it.',
 
     'no_orders' => 'No orders',
     'variant_missing' => 'Not found in the catalog',
     'next_charge_amount' => 'Next charge amount',
-    'amount_unknown' => 'Unknown â€” build the upcoming order',
+    'amount_unknown' => 'Unknown — build the upcoming order',
     'products_subtotal' => 'Products only: :amount (the difference is shipping/tax)',
 
     'action_pause' => 'Pause subscription',
@@ -97,14 +97,14 @@ return [
     'resumed_ok' => 'Subscription resumed',
 
     'action_postpone' => 'Postpone next charge',
-    'action_postpone_confirm' => 'Skip this cycle â€” the customer is not charged and receives no shipment this time.',
+    'action_postpone_confirm' => 'Skip this cycle — the customer is not charged and receives no shipment this time.',
     'postpone_until' => 'Postpone until',
     'postpone_help' => 'Defaults to one cycle ahead, based on the subscription frequency.',
     'postponed_ok' => 'Next charge postponed to :date',
 
     'action_charge_now' => 'Charge now',
     'action_charge_now_confirm' => 'The card will be charged :amount now, a Shopify order will be created, and the next charge date moves forward. This cannot be undone.',
-    'action_charge_now_no_amount' => 'The charge amount is unknown. Build the upcoming order first â€” the system will not guess an amount.',
+    'action_charge_now_no_amount' => 'The charge amount is unknown. Build the upcoming order first — the system will not guess an amount.',
     'action_charge_now_submit' => 'Yes, charge now',
     'charged_ok' => 'Charged, and the order was created',
     'charge_failed' => 'The charge failed',
@@ -116,7 +116,7 @@ return [
 
     'action_build_draft' => 'Build upcoming order',
     'action_build_draft_confirm' => "A draft order is created in Shopify from the subscription's products, and the next charge amount is set from its total.",
-    'draft_ok' => 'Upcoming order built â€” :total',
+    'draft_ok' => 'Upcoming order built — :total',
     'draft_failed' => 'Could not build the order',
     'draft_no_products' => 'The subscription has no products, so there is nothing to order. Add products to the dog first.',
 
@@ -126,12 +126,12 @@ return [
     'discount_title' => 'Subscriber discount',
     'discount_help' => 'Applied to the upcoming order. The historical orders were billed at 10%.',
 
+    'edit' => 'Edit',
     'action_customer_portal' => "View the customer's personal area",
     'action_edit_upcoming' => 'Edit the upcoming order',
     'action_edit_upcoming_help' => "A one-off change to the next order only. After it is charged, the order goes back to the dog's regular products. For a permanent change, edit the dog.",
     'add_product' => 'Add a product',
-    'upcoming_updated' => 'The upcoming order was updated â€” :total',
+    'upcoming_updated' => 'The upcoming order was updated — :total',
     'upcoming_needs_a_line' => 'An order needs at least one product',
     'edited_by_hand' => 'This upcoming order was edited by hand',
-    'edit' => 'Edit',
 ];
