@@ -12,6 +12,9 @@ class CustomerForm
     public static function configure(Schema $schema): Schema
     {
         return $schema
+            // One field per row, full width. Filament defaults a resource form's schema to
+            // two columns, which left every field at half width with dead space beside it.
+            ->columns(1)
             ->components([
                 TextInput::make('shopify_customer_id'),
                 TextInput::make('email')

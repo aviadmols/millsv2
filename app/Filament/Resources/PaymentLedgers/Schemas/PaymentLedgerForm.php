@@ -14,6 +14,9 @@ class PaymentLedgerForm
     public static function configure(Schema $schema): Schema
     {
         return $schema
+            // One field per row, full width. Filament defaults a resource form's schema to
+            // two columns, which left every field at half width with dead space beside it.
+            ->columns(1)
             ->components([
                 Select::make('subscription_id')
                     ->relationship('subscription', 'id'),

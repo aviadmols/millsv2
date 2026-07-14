@@ -51,6 +51,13 @@ return [
     'health_billing_never_help' => 'ה-scheduler לא פועל. צור ב-Railway שירות עם PROCESS=scheduler — בלעדיו אף לקוח לא יחויב.',
     'health_billing_off' => 'החיובים מושבתים',
 
+    'health_worker' => 'מבצע החיובים (תור)',
+    'health_worker_ok' => 'התור מתרוקן כרגיל (:count ממתינים)',
+    'health_worker_stuck' => ':count חיובים בתור ואף אחד לא מבצע אותם',
+    'health_worker_stuck_help' => 'ה-scheduler מכניס את החיובים לתור; ה-worker מבצע אותם. בלעדיו החיוב "רץ" כל חמש דקות ואף לקוח לא מחויב. צור ב-Railway שירות עם PROCESS=worker.',
+    'health_worker_failed' => ':count ג\'ובים נכשלו ב-24 השעות האחרונות',
+    'health_worker_failed_help' => 'החיובים נוסו וזרקו שגיאה. בדוק את טבלת failed_jobs לפני שהם ינוסו שוב.',
+
     'health_payments' => 'חיובים תקועים',
     'health_payments_ok' => 'אין חיובים ללא תשובה',
     'health_payments_stuck' => ':count חיובים ללא תשובה מ-PayMe',

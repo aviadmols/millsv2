@@ -10,6 +10,7 @@ use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Is the machine actually running?
@@ -39,12 +40,61 @@ class SystemHealth extends Widget
         return [
             'checks' => [
                 $this->billingRan(),
+                $this->queueDrained(),
                 $this->stuckPayments(),
                 $this->shopify(),
                 $this->payme(),
                 $this->sms(),
             ],
         ];
+    }
+
+    /**
+     * Is anything actually PERFORMING the charges?
+     *
+     * `mills:dispatch-due` does not charge anyone — it queues a ChargeSubscriptionJob and
+     * returns. Without a queue worker draining that queue, the scheduler runs happily every
+     * five minutes, the jobs pile up in a database table, and not one customer is billed —
+     * while the check above reports, truthfully, that billing "ran 2 minutes ago".
+     *
+     * A green CRON light over a dead worker is the most dangerous screen this app could show,
+     * so the worker gets its own line.
+     *
+     * @return array<string, mixed>
+     */
+    private function queueDrained(): array
+    {
+        // A job sitting in the queue for more than a few minutes means nobody is taking it.
+        $stale = DB::table('jobs')
+            ->where('created_at', '<=', now()->subMinutes(10)->getTimestamp())
+            ->count();
+
+        $waiting = DB::table('jobs')->count();
+        $failed = DB::table('failed_jobs')->where('failed_at', '>=', now()->subDay())->count();
+
+        if ($stale > 0) {
+            return $this->check(
+                __('dashboard.health_worker'),
+                'critical',
+                __('dashboard.health_worker_stuck', ['count' => $stale]),
+                __('dashboard.health_worker_stuck_help'),
+            );
+        }
+
+        if ($failed > 0) {
+            return $this->check(
+                __('dashboard.health_worker'),
+                'warning',
+                __('dashboard.health_worker_failed', ['count' => $failed]),
+                __('dashboard.health_worker_failed_help'),
+            );
+        }
+
+        return $this->check(
+            __('dashboard.health_worker'),
+            'ok',
+            __('dashboard.health_worker_ok', ['count' => $waiting]),
+        );
     }
 
     /**

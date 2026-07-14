@@ -70,6 +70,35 @@ class AdminLayoutTest extends TestCase
         $this->assertStringNotContainsString('repeat(2', $m[1]);
     }
 
+    /**
+     * Every resource form, not just the one someone happened to look at.
+     *
+     * This bug was reported three separate times, on three different screens, because the
+     * default is inherited by every form that does not override it — so fixing them one at a
+     * time just moves the complaint to the next page.
+     */
+    public function test_no_resource_form_inherits_the_two_column_default(): void
+    {
+        $forms = glob(app_path('Filament/Resources/*/Schemas/*Form.php'));
+
+        $this->assertNotEmpty($forms);
+
+        foreach ($forms as $form) {
+            $source = (string) file_get_contents($form);
+
+            // An empty scaffold renders nothing, so it cannot be laid out wrongly.
+            if (str_contains($source, "->components([\n                //")) {
+                continue;
+            }
+
+            $this->assertStringContainsString(
+                '->columns(1)',
+                $source,
+                basename($form).' inherits Filament\'s 2-column default — its fields will render at half width',
+            );
+        }
+    }
+
     public function test_the_dangerous_action_is_not_pushed_off_the_edge_of_the_screen(): void
     {
         $this->actingAs(User::factory()->create());

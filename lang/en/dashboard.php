@@ -51,6 +51,13 @@ return [
     'health_billing_never_help' => 'The scheduler is not running. Create a Railway service with PROCESS=scheduler — without it, nobody is ever charged.',
     'health_billing_off' => 'Billing is switched off',
 
+    'health_worker' => 'Charge worker (queue)',
+    'health_worker_ok' => 'Draining normally (:count waiting)',
+    'health_worker_stuck' => ':count charges queued and nobody is taking them',
+    'health_worker_stuck_help' => 'The scheduler queues the charges; a worker performs them. Without one, billing "runs" every five minutes and nobody is charged. Create a Railway service with PROCESS=worker.',
+    'health_worker_failed' => ':count jobs failed in the last 24 hours',
+    'health_worker_failed_help' => 'Charges were attempted and threw. Check the failed_jobs table before they are retried.',
+
     'health_payments' => 'Stuck charges',
     'health_payments_ok' => 'No charges awaiting an answer',
     'health_payments_stuck' => ':count charges with no answer from PayMe',
