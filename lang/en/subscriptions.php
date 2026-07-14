@@ -128,6 +128,7 @@ return [
 
     'edit' => 'Edit',
     'close' => 'Close',
+    'more_actions' => 'More',
 
     'payment_method' => 'Payment method',
     'card' => 'Card',

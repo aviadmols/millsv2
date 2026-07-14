@@ -18,6 +18,7 @@ use App\Support\ShopifyId;
 use App\Support\StorefrontToken;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
@@ -51,18 +52,31 @@ class ViewSubscription extends ViewRecord
      */
     public ?array $cardUpdateSession = null;
 
+    /**
+     * Nine buttons in one row ran off the edge of the screen — "Charge now", the most
+     * dangerous one, was the half that fell off. The three an admin actually reaches for stay
+     * out front; the rest live behind a menu, where a destructive action is harder to hit by
+     * accident and nothing is hidden off-screen.
+     */
     protected function getHeaderActions(): array
     {
         return [
-            $this->customerPortalAction(),
             $this->editUpcomingOrderAction(),
             $this->updateCardAction(),
-            $this->pauseAction(),
-            $this->resumeAction(),
-            $this->postponeAction(),
             $this->chargeNowAction(),
-            $this->buildDraftAction(),
-            EditAction::make(),
+
+            ActionGroup::make([
+                $this->pauseAction(),
+                $this->resumeAction(),
+                $this->postponeAction(),
+                $this->buildDraftAction(),
+                $this->customerPortalAction(),
+                EditAction::make(),
+            ])
+                ->label(__('subscriptions.more_actions'))
+                ->icon(Heroicon::OutlinedEllipsisHorizontal)
+                ->button()
+                ->color('gray'),
         ];
     }
 

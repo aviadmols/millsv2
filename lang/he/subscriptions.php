@@ -128,6 +128,7 @@ return [
 
     'edit' => 'עריכה',
     'close' => 'סגור',
+    'more_actions' => 'עוד',
 
     'payment_method' => 'אמצעי תשלום',
     'card' => 'כרטיס',

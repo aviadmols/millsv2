@@ -12,6 +12,7 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\Width;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -36,6 +37,15 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogo(asset('images/mills-logo.svg'))
             ->brandLogoHeight('1.75rem')
             ->favicon(asset('images/mills-logo.svg'))
+            /*
+             * Use the whole window.
+             *
+             * Filament caps page content at 7xl (1280px). On a wide monitor that leaves the
+             * subscription screen sitting in the left 45% with a field of empty grey beside
+             * it — and this is a screen built to show a two-column layout, an order, a product
+             * list and an order history at once. It needs the width it was designed for.
+             */
+            ->maxContentWidth(Width::Full)
             /*
              * The standard SaaS-admin palette (Klaviyo, Stripe, Linear): one indigo accent
              * over neutral slate, with colour reserved for MEANING — green is "it worked",
