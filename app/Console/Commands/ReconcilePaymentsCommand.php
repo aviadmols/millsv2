@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Domain\Billing\Contracts\PaymentGateway;
+use App\Domain\Billing\IdempotencyKey;
 use App\Domain\Billing\Ledger;
 use App\Models\PaymentLedger;
 use App\Models\SystemLog;
@@ -48,6 +49,11 @@ class ReconcilePaymentsCommand extends Command
         // answer before we go asking about it.
         $stale = PaymentLedger::query()
             ->where('status', LedgerStatus::PENDING->value)
+            // ONLY subscription charges. A card-update sale also lives in the ledger, and
+            // resolving one here would look it up as a charge, find nothing, mark it failed
+            // and schedule a billing backoff on the SUBSCRIPTION — retries for a recurring
+            // charge that was never attempted. mills:reconcile-card-updates owns those rows.
+            ->whereIn('context', IdempotencyKey::billingContexts())
             ->where('created_at', '<=', now()->subMinutes($minutes))
             ->orderBy('id')
             ->limit((int) $this->option('limit'))

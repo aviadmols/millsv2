@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Subscriptions\Schemas;
 
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Models\Dog;
+use App\Models\PaymentMethod;
 use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
@@ -114,7 +115,54 @@ class SubscriptionInfolist
                         ->placeholder(__('subscriptions.amount_unknown'))
                         ->helperText(fn (Subscription $record) => self::amountHint($record)),
                 ]),
+
+            /*
+             * The card that will actually be charged.
+             *
+             * `buyer_key` is never touched here — it is encrypted and $hidden on the model,
+             * and the masked number is the only part of a card fit to put on a screen. A
+             * subscription with no card is stated loudly rather than left to be inferred from
+             * a badge somewhere else: it means nobody is being billed.
+             */
+            Section::make(__('subscriptions.payment_method'))
+                ->columns(1)
+                ->headerActions([
+                    Action::make('updateCardInline')
+                        ->label(__('subscriptions.action_update_card'))
+                        ->icon(Heroicon::OutlinedCreditCard)
+                        ->color('gray')
+                        // Deep-links to the page header action — one definition of the modal.
+                        ->url(fn (Subscription $record) => SubscriptionResource::getUrl('view', [
+                            'record' => $record,
+                            'action' => 'updateCard',
+                        ])),
+                ])
+                ->schema([
+                    TextEntry::make('card_warning')
+                        ->hiddenLabel()
+                        ->badge()
+                        ->color('danger')
+                        ->state(__('subscriptions.card_update_required'))
+                        ->visible(fn (Subscription $record) => self::card($record) === null
+                            || $record->payment_state === PaymentState::NEEDS_CARD_UPDATE),
+
+                    TextEntry::make('card_masked')
+                        ->label(__('subscriptions.card'))
+                        ->state(fn (Subscription $record) => self::card($record)?->masked_card)
+                        ->placeholder(__('subscriptions.no_card_on_file')),
+
+                    TextEntry::make('card_captured_at')
+                        ->label(__('subscriptions.card_captured_at'))
+                        ->state(fn (Subscription $record) => self::card($record)?->captured_at)
+                        ->dateTime('Y-m-d H:i')
+                        ->placeholder('—'),
+                ]),
         ];
+    }
+
+    private static function card(Subscription $subscription): ?PaymentMethod
+    {
+        return $subscription->customer?->activePaymentMethod();
     }
 
     /** @return list<mixed> */

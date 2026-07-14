@@ -64,14 +64,23 @@ class PaymeClient
      * update flow). No buyer_key is sent — the shopper enters the card on PayMe's
      * page; afterwards getBuyerKey($payme_sale_id) returns the reusable key.
      *
-     * @param  array{price?: int|float, productName?: string, callbackUrl?: string, language?: string}  $payload
+     * PayMe will not tokenise a card for nothing, so this puts a real, small charge on a
+     * real customer's card. `price` is therefore REQUIRED: it used to default to 100 agorot
+     * — ₪1, silently, from a `??` buried in a transport client, on every card update, with
+     * nothing refunding it. A money amount must be stated by the caller that means it.
+     *
+     * @param  array{price: int, productName?: string, callbackUrl?: string, language?: string, transactionId?: string}  $payload
      * @return array<string, mixed>
      */
     public function createBuyerCaptureSale(array $payload): array
     {
+        if (! isset($payload['price'])) {
+            throw new RuntimeException('card_update_price_missing');
+        }
+
         $request = array_filter([
             'seller_payme_id' => $this->sellerId,
-            'sale_price' => $payload['price'] ?? 100,     // agorot — verification charge
+            'sale_price' => (int) $payload['price'],       // agorot — the verification charge
             'currency' => 'ILS',
             'product_name' => $payload['productName'] ?? 'עדכון אמצעי תשלום',
             'installments' => '1',
@@ -79,6 +88,7 @@ class PaymeClient
             'sale_return_url' => $payload['callbackUrl'] ?? null,
             'capture_buyer' => 1,                          // ⇒ buyer_key becomes retrievable
             'language' => $payload['language'] ?? 'he',
+            'transaction_id' => $payload['transactionId'] ?? null,
         ], fn ($v) => $v !== null);
 
         return $this->post('/generate-sale', $request);

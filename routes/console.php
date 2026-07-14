@@ -29,6 +29,18 @@ Schedule::command('mills:reconcile-payments')
     ->withoutOverlapping()
     ->onOneServer();
 
+/*
+ * Recover cards PayMe captured but never handed back.
+ *
+ * The token only reaches us if the customer's browser returns to our callback. Close the tab
+ * and the card is tokenised, the verification charge is taken, and we hold nothing — the
+ * customer stays unbillable and nobody ever finds out. This is the only thing that looks.
+ */
+Schedule::command('mills:reconcile-card-updates')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Log retention — delete system_logs / cron_runs older than
 // config('mills.logging.retention_days') (default 60 days).
 Schedule::command('logs:prune')

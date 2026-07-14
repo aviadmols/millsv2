@@ -37,15 +37,17 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogoHeight('1.75rem')
             ->favicon(asset('images/mills-logo.svg'))
             /*
-             * Shopify Admin (Polaris) palette, so the app does not look like a stranger once
-             * it is embedded inside the Shopify admin.
+             * The standard SaaS-admin palette (Klaviyo, Stripe, Linear): one indigo accent
+             * over neutral slate, with colour reserved for MEANING — green is "it worked",
+             * red is "it failed". The old Polaris green doubled as both the brand colour and
+             * the success colour, so a plain "Save" button looked exactly like a confirmation.
              */
             ->colors([
-                'primary' => Color::hex('#008060'),   // Polaris green — primary actions
-                'success' => Color::hex('#008060'),
-                'danger' => Color::hex('#D72C0D'),    // Polaris critical
-                'warning' => Color::hex('#B98900'),   // Polaris caution
-                'info' => Color::hex('#2C6ECB'),      // Polaris highlight
+                'primary' => Color::hex('#4F46E5'),   // indigo — actions
+                'success' => Color::hex('#16A34A'),
+                'danger' => Color::hex('#DC2626'),
+                'warning' => Color::hex('#D97706'),
+                'info' => Color::hex('#2563EB'),
                 'gray' => Color::Slate,
             ])
             // App Bridge — makes the panel run embedded inside Shopify Admin.

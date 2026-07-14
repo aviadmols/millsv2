@@ -6,9 +6,13 @@ use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Models\ProductVariant;
 use App\Models\Subscription;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\CardUpdateService;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
+use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
 use App\Modules\MillsSubscriptions\Services\SubscriptionActions;
+use App\Modules\MillsSubscriptions\Support\Timeline;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use App\Support\ShopifyId;
 use App\Support\StorefrontToken;
@@ -37,11 +41,22 @@ class ViewSubscription extends ViewRecord
 {
     protected static string $resource = SubscriptionResource::class;
 
+    /**
+     * The live PayMe card-update session, minted when the modal opens.
+     *
+     * Public because the Blade modal and its postMessage bridge read it. It holds a hosted
+     * URL and a session id — never card data, and never the buyer_key.
+     *
+     * @var array<string, mixed>|null
+     */
+    public ?array $cardUpdateSession = null;
+
     protected function getHeaderActions(): array
     {
         return [
             $this->customerPortalAction(),
             $this->editUpcomingOrderAction(),
+            $this->updateCardAction(),
             $this->pauseAction(),
             $this->resumeAction(),
             $this->postponeAction(),
@@ -381,6 +396,96 @@ class ViewSubscription extends ViewRecord
 
                 $this->redirect(static::getResource()::getUrl('view', ['record' => $record]));
             });
+    }
+
+    /**
+     * Replace the customer's card, from the admin.
+     *
+     * The session is minted in mountUsing — NOT while the page renders. createSession() opens
+     * a real sale at PayMe and puts a real (small) charge on the customer's card, so building
+     * it on render would bill the customer every time an admin merely LOOKED at this screen.
+     *
+     * Two ways out of the modal, deliberately: the hosted page in an iframe (for staff sitting
+     * with the customer on the phone), and the same link sent to the customer by SMS (for when
+     * they are not). PayMe may refuse to be framed, and a flow whose only path is an iframe
+     * somebody else controls is a flow that breaks silently.
+     */
+    private function updateCardAction(): Action
+    {
+        return Action::make('updateCard')
+            ->label(__('subscriptions.action_update_card'))
+            ->icon(Heroicon::OutlinedCreditCard)
+            ->color(fn (Subscription $record) => $record->payment_state === PaymentState::NEEDS_CARD_UPDATE ? 'warning' : 'gray')
+            ->modalHeading(__('subscriptions.action_update_card'))
+            ->modalDescription(__('subscriptions.action_update_card_help', [
+                'amount' => number_format(((int) config('payme.card_update_verification_agorot', 10)) / 100, 2),
+            ]))
+            ->modalWidth(Width::TwoExtraLarge)
+            ->modalSubmitAction(false)     // the work happens inside the iframe; there is nothing to submit
+            ->modalCancelActionLabel(__('subscriptions.close'))
+            ->visible(fn (Subscription $record) => $record->status !== SubscriptionStatus::CANCELLED
+                && $record->customer !== null)
+            ->mountUsing(function (Subscription $record) {
+                try {
+                    $this->cardUpdateSession = app(CardUpdateService::class)->createSession(
+                        $record->customer,
+                        $record,
+                        Timeline::admin((int) auth()->id()),
+                    );
+
+                    SystemLog::info('admin', 'card-update session opened from the admin', [
+                        'admin_id' => auth()->id(),
+                    ], ['subscription_id' => $record->id, 'customer_id' => $record->customer_id]);
+                } catch (Throwable $e) {
+                    $this->cardUpdateSession = null;
+                    $this->fail(__('subscriptions.card_update_failed'), $e->getMessage());
+                }
+            })
+            ->modalContent(fn (Subscription $record) => view('filament.actions.card-update', [
+                'session' => $this->cardUpdateSession,
+                'record' => $record,
+            ]));
+    }
+
+    /** Called by the callback page's postMessage once the card is actually stored. */
+    public function cardUpdated(bool $ok = true): void
+    {
+        if (! $ok) {
+            $this->fail(__('subscriptions.card_update_failed'), __('subscriptions.card_update_failed_body'));
+
+            return;
+        }
+
+        Notification::make()->title(__('subscriptions.card_updated_ok'))->success()->send();
+
+        $this->redirect(static::getResource()::getUrl('view', ['record' => $this->record]));
+    }
+
+    /** Send the customer the link instead — the card is entered on their own phone. */
+    public function sendCardUpdateSms(): void
+    {
+        $url = (string) ($this->cardUpdateSession['hosted_url'] ?? '');
+        $phone = (string) ($this->record->customer?->phone ?? '');
+
+        if ($url === '' || $phone === '') {
+            $this->fail(__('subscriptions.card_update_failed'), __('subscriptions.card_update_no_phone'));
+
+            return;
+        }
+
+        $sent = app(SmsSender::class)->send($phone, __('subscriptions.sms_card_update', ['url' => $url]));
+
+        if (! $sent) {
+            $this->fail(__('subscriptions.card_update_failed'), __('subscriptions.card_update_sms_failed'));
+
+            return;
+        }
+
+        SystemLog::info('admin', 'card-update link sent to the customer by SMS', [
+            'admin_id' => auth()->id(),
+        ], ['subscription_id' => $this->record->id, 'customer_id' => $this->record->customer_id]);
+
+        Notification::make()->title(__('subscriptions.card_update_sms_sent'))->success()->send();
     }
 
     /** @param array<string, mixed> $result */

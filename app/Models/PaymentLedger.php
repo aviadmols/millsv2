@@ -23,6 +23,7 @@ class PaymentLedger extends Model
             'status' => LedgerStatus::class,
             'amount' => 'decimal:2',
             'raw_response_masked' => 'array',
+            'meta' => 'array',
             'executed_at' => 'datetime',
         ];
     }

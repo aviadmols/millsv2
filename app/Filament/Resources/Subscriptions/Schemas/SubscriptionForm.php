@@ -32,6 +32,14 @@ class SubscriptionForm
     public static function configure(Schema $schema): Schema
     {
         return $schema
+            /*
+             * ONE column of sections, full width.
+             *
+             * Filament defaults a resource form's schema to two columns, which laid every
+             * Section out at half the screen with dead space beside it — the sections have
+             * their own internal columns, so they need the whole width, not half of it.
+             */
+            ->columns(1)
             ->components([
                 Section::make(__('subscriptions.owner_details'))
                     ->columns(2)
