@@ -123,9 +123,28 @@ billing skips; `/me` reports `requires_card_update:true`; billing-affecting writ
 recurring:{subscriptionId}:{cycleDate Y-m-d}     the daily recurring charge
 retry:{ledgerId}:{attemptNumber}                 domain-scheduled retries
 manual:{subscriptionId}:{adminId}:{Y-m-d}        admin "charge now"
+card_update:{sessionUuid}                        the card-verification sale
 ```
 `payment_ledger.idempotency_key` is UNIQUE. Four-layer wall: unique job → succeeded-precheck →
 unique index → `lockForUpdate`.
+
+**`card_update` is the one key that must NOT collapse.** Every other key here exists so that a
+repeat folds onto the same row — charging one cycle twice is the catastrophe. A card update is
+the opposite: two attempts on the same day are two genuinely different sales at PayMe, and
+folding them together would leave the second card captured with no row that knows about it.
+Hence the session UUID rather than a date.
+
+`IdempotencyKey::billingContexts()` names the contexts the billing engine owns.
+`mills:reconcile-payments` MUST filter on it: it resolves pending rows as subscription charges,
+so a card-update row swept through it would be marked failed and would schedule a billing
+backoff for a charge that was never attempted. `mills:reconcile-card-updates` owns those rows.
+
+### The card-update verification charge
+
+PayMe will not tokenise a card for nothing, so capturing a reusable `buyer_key` puts a real
+charge on a real card: `payme.card_update_verification_agorot` (₪0.10). It is ledgered like any
+other charge. **TODO:** ask PayMe to enable zero-amount tokenisation; then set the config to 0
+and both the charge and its ledger row disappear with no other code change.
 
 ## 5. Billing engine
 

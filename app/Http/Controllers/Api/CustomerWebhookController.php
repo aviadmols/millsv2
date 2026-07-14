@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Support\CustomerMapper;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
@@ -69,23 +70,9 @@ class CustomerWebhookController extends Controller
         }
 
         try {
-            $address = (array) ($payload['default_address'] ?? []);
-
-            $customer = Customer::query()->updateOrCreate(
-                ['shopify_customer_id' => $shopifyId],
-                array_filter([
-                    'email' => $payload['email'] ?? null,
-                    'first_name' => $payload['first_name'] ?? ($address['first_name'] ?? null),
-                    'last_name' => $payload['last_name'] ?? ($address['last_name'] ?? null),
-                    'phone' => $payload['phone'] ?? ($address['phone'] ?? null),
-                    'address1' => $address['address1'] ?? null,
-                    'address2' => $address['address2'] ?? null,
-                    'city' => $address['city'] ?? null,
-                    'province' => $address['province'] ?? null,
-                    'country' => $address['country'] ?? null,
-                    'zip' => $address['zip'] ?? null,
-                ], fn ($v) => $v !== null),
-            );
+            // The one mapping — shared with the admin's Shopify importer, so a customer added
+            // by staff and a customer delivered by webhook are the same row, field for field.
+            $customer = CustomerMapper::upsert($payload);
 
             SystemLog::info('webhook', "customer {$event}", [
                 'shopify_customer_id' => $shopifyId,

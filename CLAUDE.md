@@ -16,6 +16,11 @@ disagree, the documents win.
    metafields, or customer note JSON. Shopify is used solely for: product/variant reads,
    draft-order create/complete, order webhooks, checkout. Any PR that adds a metaobject call
    is rejected.
+   - **One carve-out: `LegacyCustomerImporter`.** The iCount population — the customers with no
+     PayMe card — exists nowhere but the Shopify customer note, because the v1 import skipped
+     them. The note is therefore READ, once, by an admin importing that customer, and never
+     again: never written, never read at runtime, never a source of truth. After the import the
+     DB is the only place that customer lives.
 2. **No charge without a ledger row.** Every gateway charge writes a `payment_ledger` row with
    status `pending` BEFORE the PayMe call, inside the same DB transaction, holding
    `lockForUpdate()` on the subscription. A `succeeded` row for the idempotency key
