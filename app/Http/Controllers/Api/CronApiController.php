@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\CronRun;
 use App\Models\SystemLog;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -24,9 +26,31 @@ class CronApiController extends Controller
 {
     public const SETTING_ENABLED = 'billing_enabled';
 
+    /**
+     * When the dispatcher last ran, as a Carbon — or null if it never has.
+     *
+     * The value is cached as an ISO STRING, never a Carbon object. A Carbon written by the
+     * scheduler container and unserialized by the web container came back as a
+     * __PHP_Incomplete_Class and threw "call to a method on an incomplete object" the moment
+     * anything read it — which took the whole dashboard down. Parsing a string cannot fail
+     * that way. The `instanceof` and int arms make this tolerant of any legacy Carbon/timestamp
+     * blob still sitting in the cache from before the fix, until the next run overwrites it.
+     */
+    public static function lastDispatchAt(): ?Carbon
+    {
+        $raw = Cache::get('billing.dispatch.last_run');
+
+        return match (true) {
+            $raw instanceof CarbonInterface => Carbon::instance($raw),
+            is_string($raw) && $raw !== '' => rescue(fn () => Carbon::parse($raw), null, false),
+            is_int($raw) => Carbon::createFromTimestamp($raw),
+            default => null,   // null, or a poisoned incomplete object — treat as "never ran"
+        };
+    }
+
     public function status(): JsonResponse
     {
-        $lastRun = Cache::get('billing.dispatch.last_run');
+        $lastRun = self::lastDispatchAt();
         $lastCron = CronRun::query()->orderByDesc('ran_at')->first();
 
         return response()->json([

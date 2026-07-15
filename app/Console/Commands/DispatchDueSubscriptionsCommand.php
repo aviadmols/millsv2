@@ -33,7 +33,7 @@ class DispatchDueSubscriptionsCommand extends Command
             $reason = config('billing.kill_switch') ? 'BILLING_KILL_SWITCH' : 'billing_enabled=0';
             $this->warn("Billing is disabled ({$reason}) — no charges dispatched.");
             SystemLog::warning('cron', 'billing dispatch skipped — billing is disabled', ['reason' => $reason]);
-            Cache::forever('billing.dispatch.last_run', now());
+            Cache::forever('billing.dispatch.last_run', now()->toIso8601String());
 
             return self::SUCCESS;
         }
@@ -86,7 +86,7 @@ class DispatchDueSubscriptionsCommand extends Command
                 }
             });
 
-        Cache::forever('billing.dispatch.last_run', now());
+        Cache::forever('billing.dispatch.last_run', now()->toIso8601String());
         $this->info("Dispatched {$dispatched} charge job(s).");
 
         if ($heldBack > 0) {

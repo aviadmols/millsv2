@@ -11,8 +11,6 @@ use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use Filament\Widgets\Widget;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -108,8 +106,10 @@ class SystemHealth extends Widget
      */
     private function billingRan(): array
     {
-        /** @var Carbon|null $lastRun */
-        $lastRun = Cache::get('billing.dispatch.last_run');
+        // Read through the safe parser, NOT the raw cache: a Carbon serialized by the
+        // scheduler container came back to the web container as an incomplete object and threw
+        // the moment this widget touched it — taking the entire dashboard down with it.
+        $lastRun = CronApiController::lastDispatchAt();
         $enabled = CronApiController::isEnabled();
 
         if ($lastRun === null) {
