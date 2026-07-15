@@ -13,6 +13,10 @@ return [
 
     'payme' => 'הגדרות PayMe',
     'payme_help' => 'פרטי החיבור לסליקת PayMe (חיוב חוזר ועדכון כרטיס).',
+    'test_payme' => 'בדוק חיבור PayMe',
+    'payme_ok' => 'החיבור ל-PayMe תקין ✓',
+    'payme_failed' => 'החיבור ל-PayMe נכשל — בדוק את ה-API URL וה-Seller ID',
+    'payme_missing' => 'הזן API URL ו-Seller ID לפני הבדיקה',
 
     'sms' => 'הגדרות SMS (019)',
     'sms_help' => 'פרטי החשבון ב-019 לשליחת קודי OTP ב-SMS.',

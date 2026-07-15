@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\AppSetting;
 use App\Models\MailSetting;
 use App\Models\ShopifyConnection;
+use App\Modules\MillsSubscriptions\Services\PayMe\PaymeClient;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -174,6 +175,30 @@ class Settings extends Page implements HasForms
                         Notification::make()->title(__('settings.shopify_ok', ['shop' => $domain]))->success()->send();
                     } else {
                         Notification::make()->title(__('settings.shopify_invalid'))->danger()->persistent()->send();
+                    }
+                }),
+            Action::make('testPayme')
+                ->label(__('settings.test_payme'))
+                ->icon(Heroicon::OutlinedCreditCard)
+                ->color('gray')
+                ->action(function (): void {
+                    // Probe the values that are on screen, saved or not — the admin
+                    // expects the visible values to be the ones tested.
+                    $apiUrl = rtrim(trim((string) ($this->data['payme_api_url'] ?? '')), '/');
+                    $sellerId = trim((string) ($this->data['payme_seller_id'] ?? ''));
+                    if ($apiUrl === '' || $sellerId === '') {
+                        Notification::make()->title(__('settings.payme_missing'))->warning()->send();
+
+                        return;
+                    }
+
+                    $client = new PaymeClient($apiUrl, $sellerId);
+                    $result = $client->testConnection();
+
+                    if ($result['ok']) {
+                        Notification::make()->title(__('settings.payme_ok'))->success()->send();
+                    } else {
+                        Notification::make()->title(__('settings.payme_failed'))->body($result['detail'] ?: null)->danger()->persistent()->send();
                     }
                 }),
             Action::make('testEmail')

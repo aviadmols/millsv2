@@ -112,6 +112,39 @@ class PaymeClient
         ]);
     }
 
+    /**
+     * Probe the seller key with a get-transactions lookup for a reference that never
+     * existed. PayMe answers business errors over HTTP 500, so what matters is WHICH
+     * error came back: a seller-related one means the key was rejected; "sale not
+     * found" (or a clean 2xx) means PayMe recognised the key.
+     *
+     * @return array{ok: bool, detail: string}
+     */
+    public function testConnection(): array
+    {
+        if (! $this->isConfigured()) {
+            return ['ok' => false, 'detail' => 'not_configured'];
+        }
+
+        try {
+            $this->post('/get-transactions', [
+                'transaction_id' => 'MILLS-CONNECTION-TEST',
+                'seller_payme_id' => $this->sellerId,
+            ]);
+
+            return ['ok' => true, 'detail' => ''];
+        } catch (RequestException) {
+            $detail = (string) ($this->lastErrorContext['payme_status_error_details'] ?? '');
+
+            return [
+                'ok' => ! str_contains(strtolower($detail), 'seller'),
+                'detail' => $detail,
+            ];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'detail' => $e->getMessage()];
+        }
+    }
+
     /** @return array<string, mixed> */
     public function getLastErrorContext(): array
     {

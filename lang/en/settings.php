@@ -13,6 +13,10 @@ return [
 
     'payme' => 'PayMe',
     'payme_help' => 'PayMe gateway credentials (recurring charges and card updates).',
+    'test_payme' => 'Test PayMe connection',
+    'payme_ok' => 'PayMe connection is valid ✓',
+    'payme_failed' => 'PayMe connection failed — check the API URL and Seller ID',
+    'payme_missing' => 'Enter the API URL and Seller ID before testing',
 
     'sms' => 'SMS (019)',
     'sms_help' => '019 account credentials for sending OTP codes by SMS.',
