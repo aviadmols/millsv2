@@ -17,11 +17,14 @@ return [
      *
      * PayMe will not tokenise a card for nothing, so capturing a reusable buyer_key costs
      * the customer a real, small charge. It lives here — one named, reviewable number —
-     * rather than as a default inside the HTTP client, where it sat at 100 agorot (₪1) and
-     * quietly billed every customer who updated a card. v1 charged ₪0.10.
+     * so the amount is chosen deliberately, not buried in the HTTP client.
+     *
+     * 100 (₪1), NOT 10. The live PayMe account rejects ₪0.10 with error 352,
+     * "סכום העסקה חורג מהמגבלות" (amount outside the limits) — it has a minimum, and ₪0.10 is
+     * below it. ₪1 is the smallest amount that account accepts, and was the original value.
      *
      * The end state is 0: ask PayMe to enable zero-amount tokenisation, set this to 0, and
      * the charge (and its ledger row) disappears without touching any other code.
      */
-    'card_update_verification_agorot' => (int) env('PAYME_CARD_UPDATE_VERIFICATION_AGOROT', 10),
+    'card_update_verification_agorot' => (int) env('PAYME_CARD_UPDATE_VERIFICATION_AGOROT', 100),
 ];

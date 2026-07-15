@@ -46,7 +46,8 @@ class CardUpdateTest extends TestCase
 
         config()->set('payme.api_url', 'https://payme.test');
         config()->set('payme.seller_id', 'SELLER1');
-        config()->set('payme.card_update_verification_agorot', 10);
+        // The config default (100) is left in place — the tests below assert against it, so a
+        // revert to a below-minimum amount would fail here rather than in production.
     }
 
     /** @return array{0: Customer, 1: Subscription} */
@@ -89,7 +90,7 @@ class CardUpdateTest extends TestCase
 
     // --- the money ------------------------------------------------------------
 
-    public function test_the_verification_charge_is_ten_agorot_not_a_shekel(): void
+    public function test_the_verification_charge_is_the_accounts_minimum(): void
     {
         [$customer, $subscription] = $this->scenario();
         $this->fakePayMe();
@@ -97,11 +98,24 @@ class CardUpdateTest extends TestCase
         app(CardUpdateService::class)->createSession($customer, $subscription);
 
         Http::assertSent(function ($request) {
-            // ₪1 on every card update, from a default nobody chose, is money the customer
-            // never agreed to and nobody could see.
+            // 100 agorot (₪1), the smallest amount the live PayMe account accepts. ₪0.10 was
+            // rejected with error 352 "סכום העסקה חורג מהמגבלות" and every card update failed.
             return str_contains($request->url(), 'generate-sale')
-                && $request['sale_price'] === 10;
+                && $request['sale_price'] === 100;
         });
+    }
+
+    public function test_the_amount_is_configurable_for_the_day_payme_allows_less(): void
+    {
+        config()->set('payme.card_update_verification_agorot', 25);
+
+        [$customer, $subscription] = $this->scenario();
+        $this->fakePayMe();
+
+        app(CardUpdateService::class)->createSession($customer, $subscription);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'generate-sale')
+            && $request['sale_price'] === 25);
     }
 
     public function test_a_price_is_never_assumed(): void
@@ -124,7 +138,7 @@ class CardUpdateTest extends TestCase
         // Money that moves without a ledger row is money the system cannot account for.
         $this->assertNotNull($ledger);
         $this->assertSame(IdempotencyKey::CONTEXT_CARD_UPDATE, $ledger->context);
-        $this->assertSame('0.10', (string) $ledger->amount);
+        $this->assertSame('1.00', (string) $ledger->amount);
         $this->assertSame(LedgerStatus::PENDING, $ledger->status);
         $this->assertSame(self::SALE_ID, $ledger->payme_transaction_id);
     }

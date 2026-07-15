@@ -142,9 +142,11 @@ backoff for a charge that was never attempted. `mills:reconcile-card-updates` ow
 ### The card-update verification charge
 
 PayMe will not tokenise a card for nothing, so capturing a reusable `buyer_key` puts a real
-charge on a real card: `payme.card_update_verification_agorot` (₪0.10). It is ledgered like any
-other charge. **TODO:** ask PayMe to enable zero-amount tokenisation; then set the config to 0
-and both the charge and its ledger row disappear with no other code change.
+charge on a real card: `payme.card_update_verification_agorot` (**₪1** = 100 agorot). ₪0.10 was
+tried and the live account rejected it with error 352, "סכום העסקה חורג מהמגבלות" — it has a
+minimum, and ₪1 is the smallest it accepts. It is ledgered like any other charge. **TODO:** ask
+PayMe to enable zero-amount tokenisation; then set the config to 0 and both the charge and its
+ledger row disappear with no other code change.
 
 ## 5. Billing engine
 
