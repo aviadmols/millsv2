@@ -19,6 +19,11 @@ case "$ROLE" in
     exec php artisan schedule:work
     ;;
   worker)
+    # --max-time makes queue:work exit CLEANLY (code 0) once an hour so the
+    # container is recycled with fresh memory. That only works with
+    # restartPolicyType=ALWAYS in railway.json — under ON_FAILURE a clean exit
+    # is never restarted, the worker dies silently, and charges pile up in the
+    # queue unexecuted (this happened: 11 days of a dead worker in July 2026).
     exec php artisan queue:work --queue=charges,mail,sync \
         --tries=3 --backoff=10 --max-time=3600 --sleep=3
     ;;
