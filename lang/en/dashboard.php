@@ -54,14 +54,14 @@ return [
     'health_worker' => 'Charge worker (queue)',
     'health_worker_ok' => 'Draining normally (:count waiting)',
     'health_worker_stuck' => ':count charges queued and nobody is taking them',
-    'health_worker_stuck_help' => 'The scheduler queues the charges; a worker performs them. Without one, billing "runs" every five minutes and nobody is charged. Create a Railway service with PROCESS=worker.',
+    'health_worker_stuck_help' => 'The worker is not draining the queue — so nobody is charged. Check that a PROCESS=worker service exists on Railway, is running, and has restart policy ALWAYS.',
     'health_worker_failed' => ':count jobs failed in the last 24 hours',
     'health_worker_failed_help' => 'Charges were attempted and threw. Check the failed_jobs table before they are retried.',
 
     'health_behind' => 'Subscriptions held back',
     'health_behind_ok' => 'None — every subscription is on schedule',
     'health_behind_count' => ':count subscriptions are more than a cycle behind',
-    'health_behind_help' => 'They are NOT being charged, on purpose: billing them would take one missed cycle every five minutes until it caught up — months of boxes that were never shipped. Open each one and move the next charge date forward, or cancel it.',
+    'health_behind_help' => 'Not charged on purpose — auto-billing would collect every missed cycle back-to-back. Open each one and move the next charge date forward, or cancel it.',
 
     'health_payments' => 'Stuck charges',
     'health_payments_ok' => 'No charges awaiting an answer',
@@ -79,5 +79,6 @@ return [
     'health_sms_help' => 'Settings → SMS. Without it no login code can be sent.',
 
     'health_recent_runs' => 'Recent runs',
+    'health_last_run' => 'Last run',
     'health_no_runs' => 'No run has ever been recorded — the scheduler is not running.',
 ];

@@ -54,14 +54,14 @@ return [
     'health_worker' => 'מבצע החיובים (תור)',
     'health_worker_ok' => 'התור מתרוקן כרגיל (:count ממתינים)',
     'health_worker_stuck' => ':count חיובים בתור ואף אחד לא מבצע אותם',
-    'health_worker_stuck_help' => 'ה-scheduler מכניס את החיובים לתור; ה-worker מבצע אותם. בלעדיו החיוב "רץ" כל חמש דקות ואף לקוח לא מחויב. צור ב-Railway שירות עם PROCESS=worker.',
+    'health_worker_stuck_help' => 'ה-worker לא מושך מהתור — ואף לקוח לא מחויב. ודא שב-Railway קיים שירות PROCESS=worker, שהוא רץ, ושמדיניות ההפעלה היא ALWAYS.',
     'health_worker_failed' => ':count ג\'ובים נכשלו ב-24 השעות האחרונות',
     'health_worker_failed_help' => 'החיובים נוסו וזרקו שגיאה. בדוק את טבלת failed_jobs לפני שהם ינוסו שוב.',
 
     'health_behind' => 'מנויים שנעצרו',
     'health_behind_ok' => 'אין — כל המנויים בלוח הזמנים',
     'health_behind_count' => ':count מנויים בפיגור של יותר ממחזור',
-    'health_behind_help' => 'הם **לא** מחויבים, בכוונה: חיוב שלהם היה גובה מחזור שהוחמץ כל חמש דקות עד שידביק את ההווה — חודשים של ארגזים שמעולם לא נשלחו. היכנס לכל אחד, הזז את תאריך החיוב הבא קדימה, או בטל אותו.',
+    'health_behind_help' => 'לא מחויבים בכוונה — חיוב אוטומטי היה גובה את כל המחזורים שהוחמצו ברצף. פתח כל מנוי והזז את תאריך החיוב הבא קדימה, או בטל אותו.',
 
     'health_payments' => 'חיובים תקועים',
     'health_payments_ok' => 'אין חיובים ללא תשובה',
@@ -79,5 +79,6 @@ return [
     'health_sms_help' => 'הגדרות ← SMS. בלי זה לא יישלח קוד אימות להתחברות.',
 
     'health_recent_runs' => 'ריצות אחרונות',
+    'health_last_run' => 'ריצה אחרונה',
     'health_no_runs' => 'לא נרשמה אף ריצה — ה-scheduler לא פועל.',
 ];
