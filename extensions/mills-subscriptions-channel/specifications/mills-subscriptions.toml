@@ -1,0 +1,11 @@
+# Channel specification (required by the channel_config extension type).
+# The handle here is the channel identity — it must stay `mills-subscriptions`
+# to match ShopifyOrderAttribution's source_name (CLAUDE.md law #11).
+
+handle = "mills-subscriptions"
+label = "Mills Subscriptions"
+
+[[countries]]
+code = "IL"
+languages = ["he"]
+currency = "ILS"

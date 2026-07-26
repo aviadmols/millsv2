@@ -26,4 +26,3 @@ redirect_urls = [
 api_version = "2026-07"
 
 [build]
-include_config_on_deploy = true

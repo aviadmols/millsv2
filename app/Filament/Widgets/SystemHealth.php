@@ -251,6 +251,22 @@ class SystemHealth extends Widget
         return compact('label', 'status', 'value', 'help');
     }
 
+    /**
+     * The scheduler records the full shell line — a /nix/store PHP binary path,
+     * quotes, and '> /dev/null 2>&1' redirects. The admin only cares about the
+     * artisan command, so everything around it stays in the DB and out of the UI.
+     */
+    private static function commandLabel(string $raw): string
+    {
+        $clean = str_replace(["'", '"'], '', $raw);
+
+        if (preg_match('/artisan\s+([^><]+)/', $clean, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return trim((string) preg_replace('/\s*\d?>.*$/', '', $clean)) ?: $raw;
+    }
+
     /** The last scheduled runs, for the "when did it last run" question. */
     public function getRecentRuns(): array
     {
@@ -259,7 +275,7 @@ class SystemHealth extends Widget
             ->limit(5)
             ->get()
             ->map(fn (CronRun $run) => [
-                'command' => $run->command,
+                'command' => self::commandLabel((string) $run->command),
                 'status' => $run->status,
                 'ran_at' => $run->ran_at?->format('Y-m-d H:i:s'),
                 'ago' => $run->ran_at?->diffForHumans(),
