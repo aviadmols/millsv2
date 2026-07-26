@@ -53,8 +53,8 @@ return [
 
     'health_worker' => 'מבצע החיובים (תור)',
     'health_worker_ok' => 'התור מתרוקן כרגיל (:count ממתינים)',
-    'health_worker_stuck' => ':count חיובים בתור ואף אחד לא מבצע אותם',
-    'health_worker_stuck_help' => 'ה-worker לא מושך מהתור — ואף לקוח לא מחויב. ודא שב-Railway קיים שירות PROCESS=worker, שהוא רץ, ושמדיניות ההפעלה היא ALWAYS.',
+    'health_worker_stuck' => ':count משימות ממתינות בתור יותר מ-10 דקות',
+    'health_worker_stuck_help' => 'אם המספר יורד ברענון — ה-worker מדביק צבר וההתראה תיעלם לבד. אם הוא לא זז, ה-worker מת ואף לקוח לא מחויב: ודא שב-Railway קיים שירות PROCESS=worker, שהוא רץ, ושמדיניות ההפעלה היא ALWAYS.',
     'health_worker_failed' => ':count ג\'ובים נכשלו ב-24 השעות האחרונות',
     'health_worker_failed_help' => 'החיובים נוסו וזרקו שגיאה. בדוק את טבלת failed_jobs לפני שהם ינוסו שוב.',
 

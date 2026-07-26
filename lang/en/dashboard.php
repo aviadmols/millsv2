@@ -53,8 +53,8 @@ return [
 
     'health_worker' => 'Charge worker (queue)',
     'health_worker_ok' => 'Draining normally (:count waiting)',
-    'health_worker_stuck' => ':count charges queued and nobody is taking them',
-    'health_worker_stuck_help' => 'The worker is not draining the queue — so nobody is charged. Check that a PROCESS=worker service exists on Railway, is running, and has restart policy ALWAYS.',
+    'health_worker_stuck' => ':count jobs have been waiting in the queue for over 10 minutes',
+    'health_worker_stuck_help' => 'If the number drops on refresh, the worker is catching up on a backlog and this clears itself. If it does not move, the worker is dead and nobody is charged: check that a PROCESS=worker service exists on Railway, is running, and has restart policy ALWAYS.',
     'health_worker_failed' => ':count jobs failed in the last 24 hours',
     'health_worker_failed_help' => 'Charges were attempted and threw. Check the failed_jobs table before they are retried.',
 
