@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Domain\Billing\IdempotencyKey;
 use App\Http\Controllers\Api\CronApiController;
 use App\Models\CronRun;
 use App\Models\PaymentLedger;
@@ -178,12 +179,20 @@ class SystemHealth extends Widget
      * Charges whose outcome we never learned. Each one is real money in limbo, and each one
      * blocks its subscription from being charged at all until it is resolved.
      *
+     * SUBSCRIPTION charges only. This used to count every pending row, so abandoned
+     * card-update sessions — someone opened the card form and closed the tab — were
+     * reported as charges in an unknown state, under a help text telling the admin to run
+     * mills:reconcile-payments, which deliberately ignores card_update rows and therefore
+     * could never clear a single one of them. Those rows belong to
+     * mills:reconcile-card-updates, which now closes them on its own.
+     *
      * @return array<string, mixed>
      */
     private function stuckPayments(): array
     {
         $stuck = PaymentLedger::query()
             ->where('status', LedgerStatus::PENDING->value)
+            ->whereIn('context', IdempotencyKey::billingContexts())
             ->where('created_at', '<=', now()->subMinutes(15))
             ->count();
 

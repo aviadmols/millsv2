@@ -302,6 +302,80 @@ class CardUpdateTest extends TestCase
         $this->assertSame('abandoned', $ledger->failure_code);
     }
 
+    /**
+     * The same abandonment, in the shape PayMe actually answers with.
+     *
+     * The test above fakes a clean 200 carrying no buyer_key. PayMe does not do that: it
+     * reports business outcomes as HTTP 500 with status_error_code 600, "Buyer not found".
+     * PaymeClient::post() throws on any non-2xx, the reconciler caught the throw as "PayMe
+     * unreachable", and the row stayed pending — for five real sessions, until each one
+     * showed up on the dashboard as a charge in an unknown state that no command could clear.
+     */
+    public function test_payme_answering_buyer_not_found_over_http_500_closes_the_row(): void
+    {
+        [$customer, $subscription] = $this->scenario();
+
+        Http::fake([
+            'https://payme.test/generate-sale' => Http::response([
+                'status_code' => 0,
+                'payme_sale_id' => self::SALE_ID,
+                'sale_url' => 'https://payme.test/hosted/'.self::SALE_ID,
+            ]),
+            'https://payme.test/get-buyer-key' => Http::response([
+                'status_code' => 1,
+                'status_error_code' => 600,
+                'status_error_details' => 'Buyer not found',
+            ], 500),
+        ]);
+
+        $session = app(CardUpdateService::class)->createSession($customer, $subscription);
+
+        Cache::flush();
+        PaymentLedger::query()->update(['created_at' => now()->subHour()]);
+
+        $this->artisan('mills:reconcile-card-updates')->assertExitCode(0);
+
+        $ledger = Ledger::find(IdempotencyKey::cardUpdate($session['session_id']));
+        $this->assertSame(LedgerStatus::FAILED, $ledger->status);
+        $this->assertSame('abandoned', $ledger->failure_code);
+
+        // No card was captured, so the wall stays exactly where it was.
+        $this->assertNull($customer->fresh()->activePaymentMethod());
+        $this->assertSame(PaymentState::NEEDS_CARD_UPDATE, $subscription->fresh()->payment_state);
+    }
+
+    /** A card update PayMe cannot answer for stays pending — but it says so out loud. */
+    public function test_an_unresolvable_card_update_is_logged_not_just_left_pending(): void
+    {
+        [$customer, $subscription] = $this->scenario();
+
+        Http::fake([
+            'https://payme.test/generate-sale' => Http::response([
+                'status_code' => 0,
+                'payme_sale_id' => self::SALE_ID,
+                'sale_url' => 'https://payme.test/hosted/'.self::SALE_ID,
+            ]),
+            // Not a business answer — PayMe itself is unwell.
+            'https://payme.test/get-buyer-key' => Http::response(['status_code' => 1], 503),
+        ]);
+
+        $session = app(CardUpdateService::class)->createSession($customer, $subscription);
+
+        Cache::flush();
+        PaymentLedger::query()->update(['created_at' => now()->subHour()]);
+
+        $this->artisan('mills:reconcile-card-updates')->assertExitCode(0);
+
+        // Never guess about a card: the row waits for the next pass.
+        $ledger = Ledger::find(IdempotencyKey::cardUpdate($session['session_id']));
+        $this->assertSame(LedgerStatus::PENDING, $ledger->status);
+
+        $this->assertDatabaseHas('system_logs', [
+            'level' => 'error',
+            'message' => 'a card update could not be resolved and stays pending',
+        ]);
+    }
+
     // --- the poison pill -----------------------------------------------------
 
     public function test_the_billing_reconciler_leaves_card_update_rows_alone(): void

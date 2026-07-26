@@ -12,6 +12,7 @@ use App\Modules\MillsSubscriptions\Services\CardUpdateService;
 use App\Modules\MillsSubscriptions\Services\PayMe\PaymeClient;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\RequestException;
 use Throwable;
 
 /**
@@ -32,6 +33,19 @@ use Throwable;
  */
 class ReconcileCardUpdatesCommand extends Command
 {
+    // === CONSTANTS ===
+
+    /**
+     * PayMe's answer when the sale exists but no card was ever entered against it.
+     *
+     * It arrives as HTTP 500 with status_error_code 600 — PayMe reports business
+     * outcomes as server errors — so PaymeClient::post() throws on it. Treating that
+     * throw as "PayMe is unreachable" left every abandoned session pending FOREVER:
+     * the rows accumulated, and each one raised "money in an unknown state" on the
+     * dashboard when in fact PayMe had told us plainly that there is no card here.
+     */
+    private const PAYME_BUYER_NOT_FOUND = 600;
+
     protected $signature = 'mills:reconcile-card-updates
         {--minutes=20 : Only sweep sessions older than this (past the 15-minute TTL, so a live browser is never raced)}
         {--limit=100 : Maximum rows to reconcile in one pass}';
@@ -65,11 +79,29 @@ class ReconcileCardUpdatesCommand extends Command
         foreach ($abandoned as $ledger) {
             try {
                 $result = $payme->getBuyerKey((string) $ledger->payme_transaction_id);
+            } catch (RequestException $e) {
+                $errorCode = (int) ($payme->getLastErrorContext()['payme_status_error_code'] ?? 0);
+
+                // "Buyer not found" is an ANSWER, not a failure: PayMe has the sale and
+                // there is no card on it. That is the abandoned case, and it closes.
+                if ($errorCode === self::PAYME_BUYER_NOT_FOUND) {
+                    $this->closeAbandoned($ledger);
+                    $closed++;
+
+                    continue;
+                }
+
+                $stuck++;
+                $this->error("#{$ledger->id}: PayMe error {$errorCode} — {$e->getMessage()}");
+                $this->reportStuck($ledger, "PayMe error {$errorCode}");
+
+                continue;
             } catch (Throwable $e) {
                 // PayMe is unreachable. Leave the row alone and try again next pass — the
                 // one thing we must never do is decide anything about a card on a guess.
                 $stuck++;
                 $this->error("#{$ledger->id}: PayMe unreachable — {$e->getMessage()}");
+                $this->reportStuck($ledger, $e->getMessage());
 
                 continue;
             }
@@ -88,6 +120,7 @@ class ReconcileCardUpdatesCommand extends Command
             if ($customer === null) {
                 $stuck++;
                 $this->error("#{$ledger->id}: a card was captured for a customer that no longer exists.");
+                $this->reportStuck($ledger, 'a card was captured for a customer that no longer exists');
 
                 continue;
             }
@@ -118,6 +151,21 @@ class ReconcileCardUpdatesCommand extends Command
         $this->line("recovered={$recovered} closed={$closed} stuck={$stuck}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * A row we could not resolve stays pending — and a pending row is invisible unless it
+     * says so. The scheduler discards this command's console output (`> /dev/null`), so
+     * without this the only trace of a stuck card update was the row itself.
+     */
+    private function reportStuck(PaymentLedger $ledger, string $reason): void
+    {
+        SystemLog::error('billing', 'a card update could not be resolved and stays pending', [
+            'ledger_id' => $ledger->id,
+            'payme_sale_id' => $ledger->payme_transaction_id,
+            'pending_since' => $ledger->created_at?->toIso8601String(),
+            'reason' => $reason,
+        ], ['subscription_id' => $ledger->subscription_id, 'customer_id' => $ledger->customer_id]);
     }
 
     /**
