@@ -8,10 +8,12 @@ use App\Modules\MillsSubscriptions\Services\LegacyCustomerImporter;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyCustomerService;
 use App\Modules\MillsSubscriptions\Support\LegacyNoteParser;
+use App\Support\PhoneNumber;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Utilities\Get;
@@ -26,9 +28,92 @@ class ListCustomers extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            $this->pushByPhoneAction(),
             $this->importFromShopifyAction(),
             CreateAction::make(),
         ];
+    }
+
+    /**
+     * Push a customer into the system from a phone number alone.
+     *
+     * A phone number is what support has when someone calls — not a Shopify customer id, and
+     * usually not the email they signed up with either. This finds them in Shopify, brings
+     * them across with whatever subscription is on their note, and leaves them flagged as
+     * needing a card, which is exactly the state the migration expects.
+     *
+     * The same import the customer's own SMS login performs, so a customer pushed here and a
+     * customer who logged in themselves end up identical — no second code path to drift.
+     */
+    private function pushByPhoneAction(): Action
+    {
+        return Action::make('pushByPhone')
+            ->label(__('customers.action_push_by_phone'))
+            ->icon(Heroicon::OutlinedDevicePhoneMobile)
+            ->color('primary')
+            ->visible(fn () => app(ShopifyAdminClient::class)->isConnected())
+            ->modalHeading(__('customers.action_push_by_phone'))
+            ->modalDescription(__('customers.push_help'))
+            ->modalSubmitActionLabel(__('customers.action_push_submit'))
+            ->schema([
+                TextInput::make('phone')
+                    ->label(__('customers.phone'))
+                    ->tel()
+                    ->required()
+                    ->placeholder('050-0000000')
+                    ->helperText(__('customers.phone_help')),
+            ])
+            ->action(function (array $data) {
+                $phone = trim((string) $data['phone']);
+
+                try {
+                    $matches = app(ShopifyCustomerService::class)->searchByPhone($phone);
+                } catch (Throwable $e) {
+                    Notification::make()->title(__('customers.push_failed'))->body($e->getMessage())->danger()->persistent()->send();
+
+                    return;
+                }
+
+                if ($matches === []) {
+                    Notification::make()
+                        ->title(__('customers.push_not_found'))
+                        ->body(__('customers.push_not_found_help', ['phone' => PhoneNumber::local($phone) ?? $phone]))
+                        ->warning()
+                        ->send();
+
+                    return;
+                }
+
+                // One number can hold several accounts; every one of them is brought in, so
+                // support is never left wondering which of the three they got.
+                $imported = 0;
+                $lastCustomerId = null;
+
+                foreach ($matches as $match) {
+                    $result = app(LegacyCustomerImporter::class)->import((string) $match['id'], (int) auth()->id());
+
+                    if ($result['customer_id'] !== null) {
+                        $imported++;
+                        $lastCustomerId = $result['customer_id'];
+                    }
+                }
+
+                if ($imported === 0) {
+                    Notification::make()->title(__('customers.push_failed'))->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('customers.push_done', ['count' => $imported]))
+                    ->body(__('customers.push_done_help'))
+                    ->success()
+                    ->send();
+
+                if ($imported === 1 && $lastCustomerId !== null) {
+                    $this->redirect(CustomerResource::getUrl('edit', ['record' => $lastCustomerId]));
+                }
+            });
     }
 
     /**

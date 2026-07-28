@@ -50,7 +50,7 @@ class VerifyStorefrontToken
                 return $this->deny('invalid_token');
             }
 
-            if (! $request->isMethod('GET')) {
+            if (! $request->isMethod('GET') && ! $this->isAllowedInPreview($request)) {
                 return $this->deny('preview_read_only', 403);
             }
         } else {
@@ -69,6 +69,21 @@ class VerifyStorefrontToken
         $request->attributes->set(self::REQUEST_ATTR_CUSTOMER, $customer);
 
         return $next($request);
+    }
+
+    /**
+     * The one write a preview may perform: starting a card update.
+     *
+     * Everything else stays blocked, because support has no business changing someone's plan
+     * behind their back. This is the exception because it cannot do that: it opens PayMe's
+     * hosted page, the CUSTOMER types the card there, and the only possible outcome is that a
+     * blocked subscription becomes billable again. Refusing it meant the one thing support is
+     * on the phone to help with was the one thing the preview could not do.
+     */
+    private function isAllowedInPreview(Request $request): bool
+    {
+        return $request->isMethod('POST')
+            && $request->routeIs('storefront.me.payment-method.payme.session');
     }
 
     private function deny(string $reason, int $status = 401): Response

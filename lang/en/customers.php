@@ -15,4 +15,15 @@ return [
     'import_no_note' => 'The customer was added. There is no active subscription on their Shopify note, so none was created.',
     'import_not_found' => 'No such customer in Shopify',
     'import_failed' => 'The import failed',
+
+    'action_push_by_phone' => 'Add by phone number',
+    'action_push_submit' => 'Add to the system',
+    'push_help' => 'Enter the number the customer gave you. They are found in Shopify and brought across with whatever subscription is on their note — flagged as needing a card, so nothing is charged until they enter one.',
+    'phone' => 'Phone number',
+    'phone_help' => 'Any format works: 050-123-4567, 0501234567 or +972501234567.',
+    'push_done' => ':count customer(s) added',
+    'push_done_help' => 'They can now be opened in the admin, and they will be asked to update their card before any change to the subscription.',
+    'push_not_found' => 'No Shopify customer with that number',
+    'push_not_found_help' => 'Nothing in the store matches :phone — it may be saved there under a different number, or only on an order rather than on the customer.',
+    'push_failed' => 'Could not add the customer',
 ];
