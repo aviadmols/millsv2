@@ -25,6 +25,21 @@ Route::post('auth/otp/request', [OtpAuthController::class, 'request'])
 Route::post('auth/otp/verify', [OtpAuthController::class, 'verify'])
     ->middleware('throttle:10,1')->name('auth.otp.verify');
 
+/*
+ * The quiz, saved by a visitor who is not logged in — and could not be.
+ *
+ * A dog quiz is filled in BEFORE anyone has an account; that is the entire point of it.
+ * The theme used to post it to the legacy /shopify/dog/save-quiz-dog, which sits behind
+ * the server-to-server api.secret, so from a browser it answers 401 and the quiz simply
+ * stopped working. saveQuiz already tolerates a null customer, so the same method serves
+ * both callers: anonymously here, and attributed to the customer at me/quiz-dogs.
+ *
+ * The saved quiz is inert — it becomes a real dog only when a logged-in customer links
+ * it at me/quiz-dogs/{id}/link. Throttled per IP because it is public and writes a row.
+ */
+Route::post('quiz-dogs', [StorefrontDogController::class, 'saveQuiz'])
+    ->middleware('throttle:20,1')->name('quiz-dogs.save');
+
 // The id the theme sends back is whatever /me gave it — which for imported records
 // is a Shopify GID (gid://shopify/Metaobject/123). GIDs contain slashes, so the
 // path params must accept them as well as plain numeric ids.

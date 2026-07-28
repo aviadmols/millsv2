@@ -272,6 +272,9 @@ class EveryEndpointTest extends TestCase
         $this->call_('POST', '/storefront/auth/otp/request', ['email' => 'every@example.com'], [], [200, 429]);
         $this->call_('POST', '/storefront/auth/otp/verify', ['email' => 'every@example.com', 'code' => '000000'], [], [401]);
 
+        // Public on purpose: the dog quiz is taken before anyone has an account.
+        $this->call_('POST', '/storefront/quiz-dogs', ['name' => 'Anon'], [], [200, 429]);
+
         $this->call_('GET', '/storefront/me', [], $sf);
         $this->call_('PATCH', '/storefront/me/address', ['city' => 'Tel Aviv'], $sf);
         $this->call_('PATCH', "/storefront/me/subscription/{$sub}", ['frequency' => 'Monthly'], $sf);
