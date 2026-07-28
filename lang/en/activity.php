@@ -1,0 +1,48 @@
+<?php
+
+return [
+    'title' => 'Activity',
+    'singular' => 'Event',
+
+    'when' => 'When',
+    'event' => 'Event',
+    'what' => 'What happened',
+    'customer' => 'Customer',
+    'subscription' => 'Subscription',
+    'who' => 'By',
+
+    'only_money' => 'Money only',
+    'only_admin' => 'Done by an admin',
+
+    'kind_quiz_linked' => 'Quiz completed',
+    'kind_subscription_created' => 'Subscription created',
+    'kind_charge_succeeded' => 'Charged',
+    'kind_charge_failed' => 'Charge failed',
+    'kind_order_created' => 'Order created',
+    'kind_card_updated' => 'Card updated',
+    'kind_status_changed' => 'Status changed',
+    'kind_address_updated' => 'Address updated',
+    'kind_dog_updated' => 'Dog updated',
+    'kind_note' => 'Note',
+
+    'actor_system' => 'System',
+    'actor_customer' => 'Customer',
+    'actor_webhook' => 'Shopify',
+    'actor_admin' => 'Admin #:id',
+
+    'sum_charged' => 'Charged :amount',
+    'sum_charge_failed' => 'Failed — :reason',
+    'sum_card_updated' => 'A new card was saved · :count subscription(s) unblocked',
+    'sum_recovered' => 'recovered automatically',
+    'sum_quiz' => 'The quiz became a dog: :dog (:weight kg)',
+    'sum_subscription_created' => 'From :source · :dogs dog(s)',
+    'sum_order' => 'Shopify order :order',
+    'sum_status' => ':model: :from → :to',
+    'model_subscription' => 'Subscription',
+    'model_dog' => 'Dog',
+    'sum_payment_state' => 'Payment state: :state',
+    'sum_address' => 'The delivery address was changed',
+
+    'empty_heading' => 'Nothing has happened yet',
+    'empty_description' => 'Every charge, card update, quiz and subscription change lands here as it happens.',
+];

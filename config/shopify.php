@@ -49,7 +49,12 @@ return [
 
     // The customer's personal area on the storefront. An admin opens it with a READ-ONLY
     // preview token (StorefrontToken::mintPreview) to see exactly what the customer sees.
-    'storefront_url' => env('STOREFRONT_URL', 'https://millsforpets.com/account'),
+    //
+    // It points at the PUBLIC preview page, not Shopify's /account: /account demands a Shopify
+    // customer session, so an admin following that link lands on a login form instead of the
+    // customer's dashboard. The preview page renders the same dashboard with `preview_mode`,
+    // which ignores the Liquid `customer` entirely and hydrates from the token in the URL.
+    'storefront_url' => env('STOREFRONT_URL', 'https://millsforpets.com/pages/account-preview'),
 
     // Storefront personal-area token (frozen v1 format; OTP mints the same shape).
     'storefront_token_secret' => env('STOREFRONT_TOKEN_SECRET'),

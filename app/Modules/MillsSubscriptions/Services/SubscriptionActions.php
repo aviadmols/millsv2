@@ -27,6 +27,20 @@ class SubscriptionActions
     ) {}
 
     /**
+     * Who is doing this.
+     *
+     * These methods are called from the admin screen and, for some, from the storefront. An
+     * authenticated admin is named; otherwise the actor stays "system" rather than being
+     * guessed at, because a wrong name in an audit trail is worse than no name.
+     */
+    private function actor(): string
+    {
+        $id = auth()->id();
+
+        return $id === null ? Timeline::ACTOR_SYSTEM : Timeline::admin((int) $id);
+    }
+
+    /**
      * Stop billing this subscription.
      *
      * `paused` is not merely cosmetic: the dispatcher only ever selects ACTIVE rows, so
@@ -39,7 +53,14 @@ class SubscriptionActions
             return;
         }
 
-        $subscription->transitionTo(SubscriptionStatus::PAUSED, array_filter(['reason' => $reason]));
+        // transitionTo already writes the activity event (from → to, plus this context), so
+        // the actor is threaded through it rather than recorded a second time — two rows for
+        // one pause would make the feed lie about how often it happened.
+        $subscription->transitionTo(
+            SubscriptionStatus::PAUSED,
+            array_filter(['reason' => $reason]),
+            $this->actor(),
+        );
 
         SystemLog::info('admin', 'subscription paused', array_filter([
             'reason' => $reason,
@@ -60,7 +81,7 @@ class SubscriptionActions
             return;
         }
 
-        $subscription->transitionTo(SubscriptionStatus::ACTIVE);
+        $subscription->transitionTo(SubscriptionStatus::ACTIVE, [], $this->actor());
 
         if ($subscription->next_charge_at !== null && $subscription->next_charge_at->isPast()) {
             $subscription->forceFill(['next_charge_at' => now()->startOfDay()])->save();
@@ -99,7 +120,7 @@ class SubscriptionActions
             'action' => 'next_charge_postponed',
             'from' => $from->toDateString(),
             'to' => $next->toDateString(),
-        ], $subscription->id, $subscription->customer_id);
+        ], $subscription->id, $subscription->customer_id, $this->actor());
 
         SystemLog::info('admin', 'next charge postponed', [
             'from' => $from->toDateString(),

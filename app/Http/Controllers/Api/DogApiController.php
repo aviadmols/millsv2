@@ -8,6 +8,7 @@ use App\Models\QuizDog;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
 use App\Modules\MillsSubscriptions\Support\StorefrontPresenter;
+use App\Modules\MillsSubscriptions\Support\Timeline;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -145,6 +146,15 @@ class DogApiController extends AbstractApiController
             'linked_dog_id' => $dog->id,
             'linked_at' => now(),
         ])->save();
+
+        // The quiz becoming a real dog on a real customer is where a subscription begins, so
+        // it belongs on the activity feed — not only in the technical API log, where nobody
+        // looking at a customer would ever find it.
+        Timeline::record(Timeline::KIND_QUIZ_LINKED, [
+            'dog_name' => $dog->name,
+            'weight' => $dog->weight,
+            'variants' => count($variants),
+        ], null, $customer->id, Timeline::ACTOR_CUSTOMER);
 
         SystemLog::info('api', 'quiz dog linked', [
             'quiz_dog' => $quizDog->public_id,

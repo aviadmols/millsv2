@@ -28,6 +28,11 @@ final class Timeline
 
     public const KIND_NOTE = 'note';
 
+    /** A quiz became a real dog on a real customer — where a subscription actually begins. */
+    public const KIND_QUIZ_LINKED = 'quiz_linked';
+
+    public const KIND_DOG_UPDATED = 'dog_updated';
+
     // === CONSTANTS: actors ===
     public const ACTOR_SYSTEM = 'system';
 
