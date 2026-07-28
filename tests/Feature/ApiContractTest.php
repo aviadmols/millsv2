@@ -123,13 +123,25 @@ class ApiContractTest extends TestCase
         $this->assertSame([(string) $subscription->id], array_column($response->json(), 'numeric_id'));
     }
 
+    /**
+     * The map is still keyed by dog, but each line is now an OBJECT carrying its own name and
+     * price rather than a bare variant id.
+     *
+     * A deliberate move of the frozen contract, and the only one so far. The theme used to
+     * price each bare id by fetching /variants/{id}.js from the storefront, which 404s for any
+     * product Shopify does not publish — a real customer subscribed to a DRAFT product saw "—"
+     * for every total. The object form is the shape the theme ALREADY understands (it is how
+     * legacy-note lines have always arrived: name and price used directly, no fetch), so both
+     * consumers of this map keep working, and `variant_id` is still there for every caller
+     * that extracts an id.
+     */
     public function test_products_map_is_keyed_by_dog(): void
     {
         [, $subscription, $dog] = $this->seedData();
 
         $this->getJson("/api/subscriptions/{$subscription->id}/products", $this->auth())
             ->assertOk()
-            ->assertJsonPath("dogs.{$dog->id}.subscription_products", ['v-1'])
+            ->assertJsonPath("dogs.{$dog->id}.subscription_products.0.variant_id", 'v-1')
             ->assertJsonPath("dogs.{$dog->id}.addons_products", []);
     }
 

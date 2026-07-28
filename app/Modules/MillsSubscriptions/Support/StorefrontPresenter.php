@@ -4,9 +4,11 @@ namespace App\Modules\MillsSubscriptions\Support;
 
 use App\Models\Customer;
 use App\Models\Dog;
+use App\Models\ProductVariant;
 use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Support\ShopifyId;
 
 /**
  * Maps the v2 DB read-model onto the FROZEN theme payload shapes (SYSTEM-MAP §3.3).
@@ -120,12 +122,57 @@ final class StorefrontPresenter
         $dogs = [];
         foreach ($subscription->dogs as $dog) {
             $dogs[self::dogId($dog)] = [
-                'subscription_products' => self::variantList($dog->selected_variants),
-                'addons_products' => self::variantList($dog->addons_products),
+                'subscription_products' => self::pricedVariantList($dog->selected_variants),
+                'addons_products' => self::pricedVariantList($dog->addons_products),
             ];
         }
 
         return ['dogs' => $dogs];
+    }
+
+    /**
+     * The lines the personal area prices — name and price included, from OUR catalog.
+     *
+     * The theme used to receive bare variant ids and fetch each price from the storefront's
+     * own /variants/{id}.js. That silently breaks for any product Shopify does not publish:
+     * a customer whose subscription contains "סלמון, תפוח אדמה - לא נמכר" (a DRAFT product)
+     * got a 404 per line, no price, and a personal area showing "—" for every total — while
+     * we held the correct ₪382 in our own product_variants table the whole time.
+     *
+     * A subscription legitimately outlives a product's life on the shelf. Pricing it must not
+     * depend on whether that product is still for sale to new customers.
+     *
+     * The shape is the one the theme already understands for legacy-note lines
+     * ({name, price} used directly, no fetch), with `variant_id` kept so every existing
+     * consumer that extracts an id from these entries keeps working.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function pricedVariantList(mixed $value): array
+    {
+        $ids = self::variantList($value);
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $variants = VariantResolver::resolve($ids)->keyBy(fn (ProductVariant $v) => (string) $v->shopify_variant_id);
+
+        $lines = [];
+
+        foreach ($ids as $id) {
+            $variant = $variants->get(ShopifyId::numeric($id));
+
+            $lines[] = array_filter([
+                'variant_id' => $id,
+                'name' => $variant !== null ? VariantResolver::label($variant) : null,
+                // AGOROT: the theme divides by 100 to display. Sending shekels here would
+                // price a ₪382 pack at ₪3.82.
+                'price' => $variant !== null ? (int) round(((float) $variant->price) * 100) : null,
+            ], fn ($v) => $v !== null);
+        }
+
+        return $lines;
     }
 
     /** @return array<string, mixed> */
