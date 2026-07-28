@@ -3,6 +3,7 @@
 namespace App\Modules\MillsSubscriptions\Services\Shopify;
 
 use App\Models\SystemLog;
+use App\Support\PhoneNumber;
 use App\Support\ShopifyId;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -102,6 +103,33 @@ class ShopifyCustomerService
                 }
             },
         );
+    }
+
+    /**
+     * Every Shopify customer holding this phone number.
+     *
+     * The wildcard is deliberate: Shopify stores whatever was typed at checkout —
+     * +972501234567, 050-123-4567, 0501234567 — and an exact match finds only one spelling.
+     * Matching on the last 9 digits finds the person however their number was written down.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchByPhone(string $phone): array
+    {
+        $key = PhoneNumber::normalise($phone);
+
+        if ($key === null) {
+            return [];
+        }
+
+        $results = $this->search('phone:*'.$key, 10);
+
+        // Shopify's wildcard can over-match, so the number is checked again here — the
+        // account this returns decides whose subscription someone is shown.
+        return array_values(array_filter(
+            $results,
+            fn (array $c) => PhoneNumber::normalise((string) ($c['phone'] ?? '')) === $key,
+        ));
     }
 
     /**

@@ -78,7 +78,12 @@ class LegacyCustomerImporter
     /**
      * @return array{status: string, customer_id: ?int, subscription_id: ?int, dogs: int}
      */
-    public function import(string $idOrGid, ?int $adminId = null): array
+    /**
+     * @param  int|null  $adminId  the admin doing this, or null when the CUSTOMER triggered it
+     *                             by logging in — the actor has to say which, because "who
+     *                             created this subscription" is answered from the feed.
+     */
+    public function import(string $idOrGid, ?int $adminId = null, ?string $actor = null): array
     {
         $payload = $this->customers->find($idOrGid);
 
@@ -132,7 +137,7 @@ class LegacyCustomerImporter
             ['source' => 'shopify_customer_note', 'dogs' => $dogs],
             $subscription->id,
             $customer->id,
-            $adminId !== null ? Timeline::admin($adminId) : Timeline::ACTOR_SYSTEM,
+            $actor ?? ($adminId !== null ? Timeline::admin($adminId) : Timeline::ACTOR_SYSTEM),
         );
 
         // Outside the transaction, and best-effort: building the upcoming order is a Shopify

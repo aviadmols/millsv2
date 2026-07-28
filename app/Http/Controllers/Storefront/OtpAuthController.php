@@ -43,14 +43,33 @@ class OtpAuthController extends Controller
             'phone' => ['required_without:email', 'nullable', 'string', 'max:32'],
             'channel' => ['nullable', 'in:email,sms'],
             'code' => ['required', 'string', 'max:12'],
+            // Sent on the SECOND call, once the customer has picked which of their accounts
+            // to open. The server only honours ids that this verified phone actually owns.
+            'customer_id' => ['nullable', 'integer'],
         ]);
 
         [$destination, $channel] = $this->resolveTarget($data);
 
-        $result = $otp->verify($destination, (string) $data['code'], $channel);
+        $result = $otp->verify(
+            $destination,
+            (string) $data['code'],
+            $channel,
+            isset($data['customer_id']) ? (int) $data['customer_id'] : null,
+        );
 
         if (! $result['ok']) {
             return response()->json(['ok' => false, 'error' => $result['error']], 401);
+        }
+
+        // One phone, several accounts: no token yet — the customer says which one first.
+        if ($result['needs_account_choice'] ?? false) {
+            return response()->json([
+                'ok' => true,
+                'data' => [
+                    'needs_account_choice' => true,
+                    'accounts' => $result['accounts'],
+                ],
+            ]);
         }
 
         return response()->json([
