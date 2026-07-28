@@ -60,14 +60,20 @@ class LegacyLoginTest extends TestCase
         $this->app->instance(SmsSender::class, $spy);
     }
 
-    /** Shopify holding the given customers on this phone. */
+    /**
+     * Shopify holding the given customers.
+     *
+     * Only the HTTP-facing search() is faked, so the real searchByPhone() — including the
+     * check that confirms the number actually belongs to the account it returns — is the code
+     * under test. Faking searchByPhone() itself would skip the very logic that was broken.
+     */
     private function fakeShopify(array $customers): void
     {
         $this->app->instance(ShopifyCustomerService::class, new class($customers) extends ShopifyCustomerService
         {
             public function __construct(private array $customers) {}
 
-            public function searchByPhone(string $phone): array
+            public function search(string $term, int $limit = 20): array
             {
                 return $this->customers;
             }
@@ -246,6 +252,37 @@ class LegacyLoginTest extends TestCase
 
         $this->assertFalse($result['ok']);
         $this->assertSame('account_not_available', $result['error']);
+    }
+
+    public function test_a_customer_whose_number_is_only_on_their_address_is_found(): void
+    {
+        /*
+         * THE REAL CASE. Plenty of Shopify customers have an empty `customer.phone` and their
+         * number only on the default address — that is what checkout collects. Confirming the
+         * match against the customer field alone threw exactly those people away: Shopify found
+         * them, and we dropped them on the floor with "no customer with that number".
+         */
+        $onAddressOnly = [
+            'id' => '900333',
+            'email' => 'address@example.com',
+            'phone' => null,                       // empty on the customer record
+            'first_name' => 'Yehiel',
+            'last_name' => 'Ohana',
+            'note' => '',
+            'default_address' => ['phone' => self::PHONE, 'address1' => 'Herzl 1'],
+        ];
+
+        $this->fakeShopify([$onAddressOnly]);
+
+        $otp = app(OtpService::class);
+        $otp->request(self::PHONE, OtpService::CHANNEL_SMS);
+
+        $this->assertCount(1, $this->sent, 'a code must go to a customer whose number is on their address');
+
+        $result = $otp->verify(self::PHONE, $this->sentCode(), OtpService::CHANNEL_SMS);
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('900333', StorefrontToken::verify($result['token']));
     }
 
     public function test_a_phone_nobody_holds_gets_no_code_and_no_account(): void

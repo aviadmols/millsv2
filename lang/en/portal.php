@@ -17,4 +17,7 @@ return [
     'no_shopify_id' => 'This customer is not linked to Shopify',
     'no_shopify_id_help' => 'The personal-area link is built from the Shopify customer id, and this customer has none — so a link cannot be created.',
     'no_base_url' => 'The storefront address is not configured (STOREFRONT_URL)',
+    'shopify_unreachable' => 'Could not reach Shopify to look this number up',
+    'imported' => 'Brought across from Shopify',
+    'imported_help' => 'This customer was not in the system yet. Their details — and any subscription on their Shopify note — have been imported.',
 ];

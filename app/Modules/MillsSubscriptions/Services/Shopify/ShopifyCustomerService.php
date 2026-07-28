@@ -124,12 +124,21 @@ class ShopifyCustomerService
 
         $results = $this->search('phone:*'.$key, 10);
 
-        // Shopify's wildcard can over-match, so the number is checked again here — the
-        // account this returns decides whose subscription someone is shown.
-        return array_values(array_filter(
-            $results,
-            fn (array $c) => PhoneNumber::normalise((string) ($c['phone'] ?? '')) === $key,
-        ));
+        /*
+         * Shopify's wildcard can over-match, so the number is confirmed here — the account
+         * this returns decides whose subscription someone is shown.
+         *
+         * Checked on the ADDRESS as well as on the customer record. Plenty of customers have
+         * an empty `customer.phone` and their number only on the default address (it is what
+         * checkout collects), and confirming against the customer field alone threw exactly
+         * those people away: Shopify found them, and we dropped them on the floor.
+         */
+        return array_values(array_filter($results, function (array $c) use ($key) {
+            $address = (array) ($c['default_address'] ?? []);
+
+            return PhoneNumber::normalise((string) ($c['phone'] ?? '')) === $key
+                || PhoneNumber::normalise((string) ($address['phone'] ?? '')) === $key;
+        }));
     }
 
     /**

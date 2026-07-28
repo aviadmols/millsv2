@@ -4,6 +4,8 @@ namespace App\Filament\Pages;
 
 use App\Models\Customer;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Services\LegacyCustomerImporter;
+use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyCustomerService;
 use App\Support\PhoneNumber;
 use App\Support\StorefrontToken;
 use Filament\Forms\Components\TextInput;
@@ -14,6 +16,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Throwable;
 
 /**
  * Open a customer's personal area from a phone number.
@@ -95,6 +98,13 @@ class CustomerPortal extends Page implements HasForms
         $customer = Customer::findByPhone($phone);
 
         if ($customer === null) {
+            // Not here yet — but they may exist in Shopify. The legacy population lives only
+            // there, and answering "no such customer" about someone the store plainly knows
+            // sends support down the wrong path entirely.
+            $customer = $this->importFromShopify($phone);
+        }
+
+        if ($customer === null) {
             Notification::make()
                 ->title(__('portal.not_found'))
                 ->body(__('portal.not_found_help', ['phone' => PhoneNumber::local($phone) ?? $phone]))
@@ -133,5 +143,45 @@ class CustomerPortal extends Page implements HasForms
         SystemLog::info('admin', "a customer's personal area was opened by phone lookup (read-only)", [
             'admin_id' => auth()->id(),
         ], ['customer_id' => $customer->id]);
+    }
+
+    /**
+     * Pull a customer across from Shopify, with the subscription hiding in their note.
+     *
+     * The same path the customer's own SMS login takes, so support sees exactly what the
+     * customer would — including the card-update wall on an imported legacy subscription.
+     */
+    private function importFromShopify(string $phone): ?Customer
+    {
+        try {
+            $matches = app(ShopifyCustomerService::class)->searchByPhone($phone);
+        } catch (Throwable $e) {
+            Notification::make()->title(__('portal.shopify_unreachable'))->body($e->getMessage())->danger()->send();
+
+            return null;
+        }
+
+        if ($matches === []) {
+            return null;
+        }
+
+        // More than one account on a number is possible; the newest is the one support is
+        // almost always asking about, and the rest are reachable from the customers list.
+        $result = app(LegacyCustomerImporter::class)->import(
+            (string) $matches[0]['id'],
+            (int) auth()->id(),
+        );
+
+        if ($result['customer_id'] === null) {
+            return null;
+        }
+
+        Notification::make()
+            ->title(__('portal.imported'))
+            ->body(__('portal.imported_help'))
+            ->success()
+            ->send();
+
+        return Customer::query()->find($result['customer_id']);
     }
 }
