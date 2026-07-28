@@ -31,7 +31,7 @@ class Settings extends Page implements HasForms
 
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
-    protected static ?int $navigationSort = 90;
+    protected static ?int $navigationSort = 80;
 
     protected string $view = 'filament.pages.settings';
 

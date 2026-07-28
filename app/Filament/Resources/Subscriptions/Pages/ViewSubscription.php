@@ -12,6 +12,7 @@ use App\Modules\MillsSubscriptions\Services\CardUpdateService;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
 use App\Modules\MillsSubscriptions\Services\SubscriptionActions;
+use App\Modules\MillsSubscriptions\Support\SmsTemplate;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use App\Support\ShopifyId;
@@ -487,7 +488,7 @@ class ViewSubscription extends ViewRecord
             return;
         }
 
-        $sent = app(SmsSender::class)->send($phone, __('subscriptions.sms_card_update', ['url' => $url]));
+        $sent = app(SmsSender::class)->send($phone, SmsTemplate::render('subscriptions.sms_card_update', ['url' => $url]));
 
         if (! $sent) {
             $this->fail(__('subscriptions.card_update_failed'), __('subscriptions.card_update_sms_failed'));

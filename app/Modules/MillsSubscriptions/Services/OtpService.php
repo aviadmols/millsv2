@@ -6,6 +6,7 @@ use App\Mail\OtpMail;
 use App\Models\Customer;
 use App\Models\OtpCode;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
+use App\Modules\MillsSubscriptions\Support\SmsTemplate;
 use App\Support\PhoneNumber;
 use App\Support\StorefrontToken;
 use Illuminate\Support\Facades\Hash;
@@ -70,7 +71,11 @@ class OtpService
         // Only actually deliver when the destination maps to a real customer.
         if ($customer !== null) {
             if ($channel === self::CHANNEL_SMS) {
-                $this->sms->send(PhoneNumber::local($destination) ?? $destination, __('otp.sms.body', ['code' => $code]));
+                // Through SmsTemplate so the admin's edited wording is what actually goes out.
+                $this->sms->send(
+                    PhoneNumber::local($destination) ?? $destination,
+                    SmsTemplate::render('otp.sms.body', ['code' => $code]),
+                );
             } else {
                 Mail::to($key)->send(new OtpMail($code, self::TTL_MINUTES));
             }

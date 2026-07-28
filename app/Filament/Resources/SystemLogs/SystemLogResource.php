@@ -24,7 +24,7 @@ class SystemLogResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
 
-    protected static ?int $navigationSort = 95;
+    protected static ?int $navigationSort = 70;
 
     public static function getNavigationLabel(): string
     {

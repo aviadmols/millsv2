@@ -24,7 +24,7 @@ class SubscriptionResource extends Resource
 
     // Subscriptions are the reason this app exists — they belong directly under the home
     // screen, not buried among the supporting resources.
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 10;
 
     public static function getNavigationLabel(): string
     {
