@@ -153,7 +153,14 @@ class StorefrontDogController extends AbstractStorefrontController
             'customer_id' => $customer?->id,
         ]);
 
-        return $this->ok(['quizDog' => ['id' => $quizDog->public_id]]);
+        /*
+         * `id` is duplicated at the top of `data` deliberately. The theme's
+         * extractDogIdFromResponse() walks payload.data.id FIRST and falls through to
+         * payload.data.quizDog — which is an OBJECT, so a response carrying only the nested
+         * shape gets "[object Object]" stored as the quiz-dog id and the cart sync breaks
+         * silently. The flat field is what it actually reads.
+         */
+        return $this->ok(['id' => $quizDog->public_id, 'quizDog' => ['id' => $quizDog->public_id]]);
     }
 
     /** Turn a saved quiz into a real dog on the authenticated customer. */
