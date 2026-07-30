@@ -3,10 +3,14 @@
 namespace App\Http\Middleware;
 
 use App\Models\Customer;
+use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Services\LegacyCustomerImporter;
+use App\Modules\MillsSubscriptions\Support\Timeline;
 use App\Support\StorefrontToken;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 /**
  * Authenticates the personal area (SYSTEM-MAP §3.3). Reads the Bearer token,
@@ -62,6 +66,23 @@ class VerifyStorefrontToken
         }
 
         $customer = Customer::query()->where('shopify_customer_id', $subject)->first();
+
+        /*
+         * A valid token for a customer we have never imported is not an intruder — it is a
+         * real Shopify customer opening their personal area for the first time. The token is
+         * minted server-side by Liquid only for a logged-in Shopify session, so the identity
+         * is already proven; refusing them meant most of the store's customers hit a blank
+         * 401 the moment they opened /account, while the SMS login imported the very same
+         * people happily. Same importer, same result: their details and any legacy-note
+         * subscription come across, behind the card-update wall.
+         *
+         * Previews are deliberately excluded: a read-only preview must not write rows, and
+         * the admin flows that mint pv. tokens import the customer before minting.
+         */
+        if ($customer === null && ! StorefrontToken::isPreview($token)) {
+            $customer = $this->importFirstTimer($subject);
+        }
+
         if ($customer === null) {
             return $this->deny('customer_not_found');
         }
@@ -69,6 +90,30 @@ class VerifyStorefrontToken
         $request->attributes->set(self::REQUEST_ATTR_CUSTOMER, $customer);
 
         return $next($request);
+    }
+
+    private function importFirstTimer(string $shopifyCustomerId): ?Customer
+    {
+        try {
+            $result = app(LegacyCustomerImporter::class)->import($shopifyCustomerId, null, Timeline::ACTOR_CUSTOMER);
+        } catch (Throwable $e) {
+            // Shopify unreachable — deny rather than guess; the next visit will try again.
+            SystemLog::warning('storefront', 'first-visit import failed', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($result['customer_id'] === null) {
+            return null;   // Shopify itself does not know this id — THAT is an invalid subject
+        }
+
+        SystemLog::info('storefront', 'customer imported on their first visit to the personal area', [
+            'status' => $result['status'],
+        ], ['customer_id' => $result['customer_id']]);
+
+        return Customer::query()->find($result['customer_id']);
     }
 
     /**
