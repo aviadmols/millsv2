@@ -8,6 +8,7 @@ use App\Models\ShopifyConnection;
 use App\Modules\MillsSubscriptions\Services\PayMe\PaymeClient;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -73,6 +74,8 @@ class Settings extends Page implements HasForms
             'sms_019_username' => AppSetting::get('sms_019_username'),
             'sms_019_token' => AppSetting::get('sms_019_token'),
             'sms_019_sender' => AppSetting::get('sms_019_sender'),
+
+            'billing_hour' => (string) AppSetting::get('billing_hour', '9'),
         ]);
     }
 
@@ -120,6 +123,19 @@ class Settings extends Page implements HasForms
                         TextInput::make('sms_019_token')->label('019 Token')->password()->revealable(),
                         TextInput::make('sms_019_sender')->label(__('settings.sms_sender')),
                     ]),
+
+                Section::make(__('settings.billing'))
+                    ->description(__('settings.billing_help'))
+                    ->columns(2)
+                    ->schema([
+                        Select::make('billing_hour')
+                            ->label(__('settings.billing_hour'))
+                            ->helperText(__('settings.billing_hour_help'))
+                            ->options(collect(range(0, 23))
+                                ->mapWithKeys(fn (int $h) => [(string) $h => sprintf('%02d:00', $h)])
+                                ->all())
+                            ->required(),
+                    ]),
             ]);
     }
 
@@ -139,7 +155,7 @@ class Settings extends Page implements HasForms
             'from_address' => $d['from_address'] ?? null,
         ])->save();
 
-        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender'] as $key) {
+        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender', 'billing_hour'] as $key) {
             AppSetting::put($key, $d[$key] ?? null);
         }
 

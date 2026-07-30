@@ -133,7 +133,7 @@ class OrderHistoryService
             return;
         }
 
-        foreach ([5, 10, 25] as $limit) {
+        foreach ([5, 10, 25, 50] as $limit) {
             Cache::forget("shopify.orders.{$shopifyId}.{$limit}.v2");
         }
     }

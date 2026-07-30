@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Domain\Billing\IdempotencyKey;
 use App\Http\Controllers\Api\CronApiController;
 use App\Jobs\ChargeSubscriptionJob;
+use App\Models\AppSetting;
 use App\Models\Subscription;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
@@ -34,6 +35,28 @@ class DispatchDueSubscriptionsCommand extends Command
             $this->warn("Billing is disabled ({$reason}) — no charges dispatched.");
             SystemLog::warning('cron', 'billing dispatch skipped — billing is disabled', ['reason' => $reason]);
             Cache::forever('billing.dispatch.last_run', now()->toIso8601String());
+
+            return self::SUCCESS;
+        }
+
+        /*
+         * The admin-chosen billing hour, ISRAEL time.
+         *
+         * The scheduler ticks every five minutes around the clock, and next_charge_at is a
+         * bare date — so without this gate the first tick after midnight charged everyone,
+         * and customers woke to 00:05 charges and 00:06 order confirmations. Before the
+         * chosen hour nothing dispatches; from it onward every tick proceeds as usual, so a
+         * missed tick (deploy, crash) is caught up the same day. Idempotency keys make the
+         * repeats collapse.
+         */
+        $billingHour = max(0, min(23, (int) AppSetting::get('billing_hour', 9)));
+
+        if (now('Asia/Jerusalem')->hour < $billingHour) {
+            // last_run still moves: "waiting for 09:00" is billing WORKING, and the
+            // dashboard's CRON light must not go red over it. Quiet on purpose — a
+            // SystemLog row every five minutes all night is noise nobody reads.
+            Cache::forever('billing.dispatch.last_run', now()->toIso8601String());
+            $this->info(sprintf('Waiting for the billing hour (%02d:00 Israel).', $billingHour));
 
             return self::SUCCESS;
         }

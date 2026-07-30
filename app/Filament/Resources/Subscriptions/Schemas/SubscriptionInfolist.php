@@ -259,7 +259,9 @@ class SubscriptionInfolist
                         ->hiddenLabel()
                         ->view('filament.infolists.order-history')
                         ->state(fn (Subscription $record) => $record->customer
-                            ? app(OrderHistoryService::class)->forCustomer($record->customer)
+                            // 25, not the default 10 — "where is her March order" is the
+                            // question this section exists to answer.
+                            ? app(OrderHistoryService::class)->forCustomer($record->customer, 25)
                             : []),
                 ]),
 

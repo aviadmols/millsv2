@@ -37,4 +37,9 @@ return [
     'shopify_ok' => 'Shopify connection is valid ✓ (:shop)',
     'shopify_invalid' => 'Token is not valid — please reconnect via the "Connect / Reconnect Shopify" button',
     'shopify_not_connected' => 'App is not connected to Shopify — click "Connect / Reconnect Shopify"',
+
+    'billing' => 'Billing',
+    'billing_help' => 'When the recurring charges run each day.',
+    'billing_hour' => 'Daily billing hour (Israel time)',
+    'billing_hour_help' => 'Charges due that day are collected from this hour onward. Nothing is charged before it — nobody wants a 00:05 charge notification.',
 ];

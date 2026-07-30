@@ -276,6 +276,7 @@ class EveryEndpointTest extends TestCase
         $this->call_('POST', '/storefront/quiz-dogs', ['name' => 'Anon'], [], [200, 429]);
 
         $this->call_('GET', '/storefront/me', [], $sf);
+        $this->call_('GET', '/storefront/me/orders', [], $sf);
         $this->call_('PATCH', '/storefront/me/address', ['city' => 'Tel Aviv'], $sf);
         $this->call_('PATCH', "/storefront/me/subscription/{$sub}", ['frequency' => 'Monthly'], $sf);
         $this->call_('PATCH', "/storefront/me/subscription/{$sub}/add-dog", ['dogId' => (string) $dog], $sf);

@@ -49,39 +49,43 @@ $idPattern = '[0-9]+|gid:\/\/shopify\/[A-Za-z]+\/[0-9]+';
 Route::middleware(['storefront.token', 'throttle:60,1'])
     ->where(['id' => $idPattern])
     ->group(function () {
-    Route::get('me', [StorefrontMeController::class, 'show'])->name('me.show');
+        Route::get('me', [StorefrontMeController::class, 'show'])->name('me.show');
 
-    // Subscription writes — all blocked by the card-update wall.
-    Route::patch('me/subscription/{id}', [StorefrontSubscriptionController::class, 'update'])
-        ->name('me.subscription.update');
-    Route::patch('me/subscription/{id}/add-dog', [StorefrontSubscriptionController::class, 'addDog'])
-        ->name('me.subscription.add-dog');
-    Route::patch('me/subscription/{id}/remove-dog', [StorefrontSubscriptionController::class, 'removeDog'])
-        ->name('me.subscription.remove-dog');
+        // The customer's real Shopify orders — the token-side counterpart of Liquid
+        // `customer.orders`, which an SMS-logged-in customer does not have.
+        Route::get('me/orders', [StorefrontMeController::class, 'orders'])->name('me.orders');
 
-    // Dog writes — only the billing-affecting ones hit the wall.
-    Route::patch('me/dogs/{id}', [StorefrontDogController::class, 'update'])
-        ->name('me.dogs.update');
-    Route::patch('me/dogs/{id}/change-variant', [StorefrontDogController::class, 'changeVariant'])
-        ->name('me.dogs.change-variant');
-    Route::patch('me/dogs/{id}/addons/add', [StorefrontDogController::class, 'addAddon'])
-        ->name('me.dogs.addons.add');
-    Route::patch('me/dogs/{id}/addons/remove', [StorefrontDogController::class, 'removeAddon'])
-        ->name('me.dogs.addons.remove');
-    Route::post('me/dogs/{id}/remove', [StorefrontDogController::class, 'destroy'])
-        ->name('me.dogs.destroy');
+        // Subscription writes — all blocked by the card-update wall.
+        Route::patch('me/subscription/{id}', [StorefrontSubscriptionController::class, 'update'])
+            ->name('me.subscription.update');
+        Route::patch('me/subscription/{id}/add-dog', [StorefrontSubscriptionController::class, 'addDog'])
+            ->name('me.subscription.add-dog');
+        Route::patch('me/subscription/{id}/remove-dog', [StorefrontSubscriptionController::class, 'removeDog'])
+            ->name('me.subscription.remove-dog');
 
-    // Quiz → dog
-    Route::post('me/quiz-dogs', [StorefrontDogController::class, 'saveQuiz'])
-        ->name('me.quiz-dogs.save');
-    Route::post('me/quiz-dogs/{quizDogId}/link', [StorefrontDogController::class, 'linkQuiz'])
-        ->name('me.quiz-dogs.link');
+        // Dog writes — only the billing-affecting ones hit the wall.
+        Route::patch('me/dogs/{id}', [StorefrontDogController::class, 'update'])
+            ->name('me.dogs.update');
+        Route::patch('me/dogs/{id}/change-variant', [StorefrontDogController::class, 'changeVariant'])
+            ->name('me.dogs.change-variant');
+        Route::patch('me/dogs/{id}/addons/add', [StorefrontDogController::class, 'addAddon'])
+            ->name('me.dogs.addons.add');
+        Route::patch('me/dogs/{id}/addons/remove', [StorefrontDogController::class, 'removeAddon'])
+            ->name('me.dogs.addons.remove');
+        Route::post('me/dogs/{id}/remove', [StorefrontDogController::class, 'destroy'])
+            ->name('me.dogs.destroy');
 
-    // Card update (PayMe hosted page)
-    Route::post('me/payment-method/payme/session', [StorefrontPaymentController::class, 'createSession'])
-        ->name('me.payment-method.payme.session');
+        // Quiz → dog
+        Route::post('me/quiz-dogs', [StorefrontDogController::class, 'saveQuiz'])
+            ->name('me.quiz-dogs.save');
+        Route::post('me/quiz-dogs/{quizDogId}/link', [StorefrontDogController::class, 'linkQuiz'])
+            ->name('me.quiz-dogs.link');
 
-    // Address (local DB first, pushed to Shopify best-effort)
-    Route::patch('me/address', [StorefrontAddressController::class, 'update'])
-        ->name('me.address.update');
-});
+        // Card update (PayMe hosted page)
+        Route::post('me/payment-method/payme/session', [StorefrontPaymentController::class, 'createSession'])
+            ->name('me.payment-method.payme.session');
+
+        // Address (local DB first, pushed to Shopify best-effort)
+        Route::patch('me/address', [StorefrontAddressController::class, 'update'])
+            ->name('me.address.update');
+    });
