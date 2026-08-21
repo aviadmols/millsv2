@@ -25,65 +25,65 @@ Route::middleware('api.secret')
     ->where(['id' => $idPattern, 'customerId' => $idPattern, 'draftOrderId' => $idPattern])
     ->group(function () {
 
-    Route::prefix('shopify/subscription')->group(function () {
-        Route::get('active/charge-cycle-today', [SubscriptionApiController::class, 'dueToday']);
-        Route::post('from-order', [SubscriptionApiController::class, 'createFromOrder']);
+        Route::prefix('shopify/subscription')->group(function () {
+            Route::get('active/charge-cycle-today', [SubscriptionApiController::class, 'dueToday']);
+            Route::post('from-order', [SubscriptionApiController::class, 'createFromOrder']);
 
-        Route::get('customer/{customerId}', [SubscriptionApiController::class, 'byCustomer']);
-        Route::get('status/{status}', [SubscriptionApiController::class, 'byStatus']);
-        Route::get('draft-order/{draftOrderId}', [SubscriptionApiController::class, 'byDraftOrder']);
+            Route::get('customer/{customerId}', [SubscriptionApiController::class, 'byCustomer']);
+            Route::get('status/{status}', [SubscriptionApiController::class, 'byStatus']);
+            Route::get('draft-order/{draftOrderId}', [SubscriptionApiController::class, 'byDraftOrder']);
 
-        Route::post('{id}/create-draft-order', [SubscriptionApiController::class, 'createDraftOrder']);
-        Route::patch('{id}/update-draft-order', [SubscriptionApiController::class, 'updateDraftOrder']);
-        Route::get('{id}/draft-order', [SubscriptionApiController::class, 'getDraftOrder']);
+            Route::post('{id}/create-draft-order', [SubscriptionApiController::class, 'createDraftOrder']);
+            Route::patch('{id}/update-draft-order', [SubscriptionApiController::class, 'updateDraftOrder']);
+            Route::get('{id}/draft-order', [SubscriptionApiController::class, 'getDraftOrder']);
 
-        Route::get('{id}/products', [SubscriptionApiController::class, 'products']);
-        Route::patch('{id}/add-dog', [SubscriptionApiController::class, 'addDog']);
-        Route::patch('{id}/remove-dog', [SubscriptionApiController::class, 'removeDog']);
+            Route::get('{id}/products', [SubscriptionApiController::class, 'products']);
+            Route::patch('{id}/add-dog', [SubscriptionApiController::class, 'addDog']);
+            Route::patch('{id}/remove-dog', [SubscriptionApiController::class, 'removeDog']);
 
-        Route::post('/', [SubscriptionApiController::class, 'store']);
-        Route::get('/', [SubscriptionApiController::class, 'index']);
+            Route::post('/', [SubscriptionApiController::class, 'store']);
+            Route::get('/', [SubscriptionApiController::class, 'index']);
 
-        // Collection-level PATCH/DELETE addressed by ?id= (v1 quirk).
-        Route::patch('/', function (Request $request, SubscriptionApiController $controller) {
-            $id = (string) $request->query('id', '');
-            abort_if($id === '', 422, 'Subscription id is required');
+            // Collection-level PATCH/DELETE addressed by ?id= (v1 quirk).
+            Route::patch('/', function (Request $request, SubscriptionApiController $controller) {
+                $id = (string) $request->query('id', '');
+                abort_if($id === '', 422, 'Subscription id is required');
 
-            return $controller->update($request, $id);
+                return $controller->update($request, $id);
+            });
+            Route::delete('/', function (Request $request, SubscriptionApiController $controller) {
+                $id = (string) $request->query('id', '');
+                abort_if($id === '', 422, 'Subscription id is required');
+
+                return $controller->destroy($id);
+            });
+
+            Route::get('{id}', [SubscriptionApiController::class, 'show']);
         });
-        Route::delete('/', function (Request $request, SubscriptionApiController $controller) {
-            $id = (string) $request->query('id', '');
-            abort_if($id === '', 422, 'Subscription id is required');
 
-            return $controller->destroy($id);
+        Route::prefix('shopify/dog')->group(function () {
+            Route::get('/', [DogApiController::class, 'hello']);
+            Route::post('save-quiz-dog', [DogApiController::class, 'saveQuiz']);
+            Route::post('recommend', [DogApiController::class, 'recommend']);
+            Route::post('link-quiz-dog-customer', [DogApiController::class, 'linkQuiz']);
+            Route::patch('add-addon', [DogApiController::class, 'addAddon']);
+            Route::patch('remove-addon', [DogApiController::class, 'removeAddon']);
+            Route::patch('change_subscription_variant', [DogApiController::class, 'changeSubscriptionVariant']);
+            Route::patch('change_subscription_status', [DogApiController::class, 'changeSubscriptionStatus']);
+            Route::post('change_status', [DogApiController::class, 'changeStatus']);
+            Route::post('remove-dog-from-customer', [DogApiController::class, 'removeFromCustomer']);
+            Route::patch('update', [DogApiController::class, 'update']);
         });
 
-        Route::get('{id}', [SubscriptionApiController::class, 'show']);
-    });
+        Route::prefix('order')->group(function () {
+            Route::get('/', [OrderApiController::class, 'hello']);
+            Route::post('create-draft-order', [OrderApiController::class, 'createDraft']);
+            Route::get('subscription', [OrderApiController::class, 'processBilling']);
 
-    Route::prefix('shopify/dog')->group(function () {
-        Route::get('/', [DogApiController::class, 'hello']);
-        Route::post('save-quiz-dog', [DogApiController::class, 'saveQuiz']);
-        Route::post('recommend', [DogApiController::class, 'recommend']);
-        Route::post('link-quiz-dog-customer', [DogApiController::class, 'linkQuiz']);
-        Route::patch('add-addon', [DogApiController::class, 'addAddon']);
-        Route::patch('remove-addon', [DogApiController::class, 'removeAddon']);
-        Route::patch('change_subscription_variant', [DogApiController::class, 'changeSubscriptionVariant']);
-        Route::patch('change_subscription_status', [DogApiController::class, 'changeSubscriptionStatus']);
-        Route::post('change_status', [DogApiController::class, 'changeStatus']);
-        Route::post('remove-dog-from-customer', [DogApiController::class, 'removeFromCustomer']);
-        Route::patch('update', [DogApiController::class, 'update']);
+            Route::post('cron/init', [CronApiController::class, 'init']);
+            Route::post('cron/start', [CronApiController::class, 'start']);
+            Route::post('cron/stop', [CronApiController::class, 'stop']);
+            Route::post('cron/trigger', [CronApiController::class, 'trigger']);
+            Route::get('cron/status', [CronApiController::class, 'status']);
+        });
     });
-
-    Route::prefix('order')->group(function () {
-        Route::get('/', [OrderApiController::class, 'hello']);
-        Route::post('create-draft-order', [OrderApiController::class, 'createDraft']);
-        Route::get('subscription', [OrderApiController::class, 'processBilling']);
-
-        Route::post('cron/init', [CronApiController::class, 'init']);
-        Route::post('cron/start', [CronApiController::class, 'start']);
-        Route::post('cron/stop', [CronApiController::class, 'stop']);
-        Route::post('cron/trigger', [CronApiController::class, 'trigger']);
-        Route::get('cron/status', [CronApiController::class, 'status']);
-    });
-});

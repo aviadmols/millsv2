@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Models\QuizDog;
 use App\Models\Subscription;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Enums\PaymentState;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Support\StorefrontPresenter;
 use Illuminate\Http\JsonResponse;
@@ -93,13 +95,13 @@ class OrderApiController extends AbstractApiController
                 $subscription = new Subscription;
                 $subscription->fill([
                     'customer_id' => $customer->id,
-                    'payment_state' => \App\Modules\MillsSubscriptions\Enums\PaymentState::NEEDS_CARD_UPDATE->value,
+                    'payment_state' => PaymentState::NEEDS_CARD_UPDATE->value,
                     'frequency_months' => 1,
                     'original_order_id' => $orderId,
                     'next_charge_at' => now()->addMonth(),
                 ]);
                 $subscription->forceFill([
-                    'status' => \App\Modules\MillsSubscriptions\Enums\SubscriptionStatus::PENDING->value,
+                    'status' => SubscriptionStatus::PENDING->value,
                 ])->save();
             }
 

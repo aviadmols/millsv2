@@ -7,6 +7,7 @@ use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Support\DashboardMetrics;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use Filament\Actions\Action;
+use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
@@ -76,7 +77,7 @@ class UpcomingOrders extends BaseWidget
                     ->placeholder(__('dashboard.amount_missing'))
                     ->color(fn (Subscription $record) => empty($record->next_charge_amount) ? 'danger' : null)
                     ->summarize(
-                        \Filament\Tables\Columns\Summarizers\Sum::make()
+                        Sum::make()
                             ->label(__('dashboard.total'))
                             ->money('ILS'),
                     ),
