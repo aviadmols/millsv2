@@ -3,18 +3,21 @@
 namespace Tests\Feature;
 
 use App\Filament\Widgets\MillsStats;
+use App\Filament\Widgets\SystemHealth;
 use App\Filament\Widgets\UpcomingCharges;
 use App\Filament\Widgets\UpcomingOrders;
 use App\Models\Customer;
 use App\Models\PaymentLedger;
 use App\Models\Subscription;
 use App\Models\User;
-use Livewire\Livewire;
 use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Support\DashboardMetrics;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -192,5 +195,41 @@ class DashboardTest extends TestCase
 
         Livewire::test(UpcomingOrders::class)
             ->assertCanSeeTableRecords([$subscription]);
+    }
+
+    // --- the worker light -----------------------------------------------------
+
+    private function failedJob(string $queue): void
+    {
+        DB::table('failed_jobs')->insert([
+            'uuid' => (string) Str::uuid(),
+            'connection' => 'database',
+            'queue' => $queue,
+            'payload' => '{}',
+            'exception' => 'cURL error 28: Connection timed out',
+            'failed_at' => now(),
+        ]);
+    }
+
+    public function test_a_failed_sync_job_is_not_reported_as_a_failed_charge(): void
+    {
+        // The line is called "Charge worker" and its help text says charges threw. Counting
+        // every failed job here sent someone hunting through the billing tables for a Shopify
+        // product sync that had timed out — and taught them to distrust the light.
+        $this->actingAs(User::factory()->create());
+        $this->failedJob('sync');
+
+        Livewire::test(SystemHealth::class)
+            ->assertSee('not charges')
+            ->assertDontSee('charges failed in the last 24 hours');
+    }
+
+    public function test_a_failed_charge_still_says_so(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $this->failedJob('charges');
+
+        Livewire::test(SystemHealth::class)
+            ->assertSee('charges failed in the last 24 hours');
     }
 }

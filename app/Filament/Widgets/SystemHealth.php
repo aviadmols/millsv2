@@ -73,7 +73,23 @@ class SystemHealth extends Widget
             ->count();
 
         $waiting = DB::table('jobs')->count();
-        $failed = DB::table('failed_jobs')->where('failed_at', '>=', now()->subDay())->count();
+
+        /*
+         * Split by queue. This line is called "Charge worker" and its help text tells the
+         * admin that charges threw — so counting every failed job here told them money had
+         * failed when what had actually failed was a Shopify product sync. A false charge
+         * alarm is not a harmless one: it sends someone hunting through the billing tables
+         * for a problem that is not there, and it teaches them to ignore this light.
+         */
+        $failedCharges = DB::table('failed_jobs')
+            ->where('failed_at', '>=', now()->subDay())
+            ->where('queue', 'charges')
+            ->count();
+
+        $failedOther = DB::table('failed_jobs')
+            ->where('failed_at', '>=', now()->subDay())
+            ->where('queue', '!=', 'charges')
+            ->count();
 
         if ($stale > 0) {
             return $this->check(
@@ -84,12 +100,21 @@ class SystemHealth extends Widget
             );
         }
 
-        if ($failed > 0) {
+        if ($failedCharges > 0) {
             return $this->check(
                 __('dashboard.health_worker'),
                 'warning',
-                __('dashboard.health_worker_failed', ['count' => $failed]),
+                __('dashboard.health_worker_failed', ['count' => $failedCharges]),
                 __('dashboard.health_worker_failed_help'),
+            );
+        }
+
+        if ($failedOther > 0) {
+            return $this->check(
+                __('dashboard.health_worker'),
+                'warning',
+                __('dashboard.health_worker_failed_other', ['count' => $failedOther]),
+                __('dashboard.health_worker_failed_other_help'),
             );
         }
 
