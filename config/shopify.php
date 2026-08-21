@@ -47,6 +47,10 @@ return [
     // The single subscription product whose variants are the recurring flavors.
     'subscription_product_id' => env('SHOPIFY_SUBSCRIPTION_PRODUCT_ID', '8499033800792'),
 
+    // The hidden pricing product the storefront sells subscriptions through. A paid
+    // order carrying one of its variants IS a subscription signup (PaidOrderIngestor).
+    'subscription_product_handle' => env('SHOPIFY_SUBSCRIPTION_PRODUCT_HANDLE', 'subs-test'),
+
     // The customer's personal area on the storefront. An admin opens it with a READ-ONLY
     // preview token (StorefrontToken::mintPreview) to see exactly what the customer sees.
     //

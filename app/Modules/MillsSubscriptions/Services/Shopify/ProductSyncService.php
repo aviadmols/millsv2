@@ -26,22 +26,28 @@ use Illuminate\Support\Facades\Log;
  */
 class ProductSyncService
 {
-    private const PAGE_QUERY = <<<'GQL'
-    query($cursor: String) {
-      products(first: 50, after: $cursor) {
-        pageInfo { hasNextPage endCursor }
-        nodes {
-          id title handle status tags productType
-          featuredImage { url }
-          multiplier: metafield(namespace: "product", key: "multiplier") { value }
-          collections(first: 10) { nodes { title } }
-          variants(first: 100) {
-            nodes { id title sku price availableForSale image { url } }
-          }
-        }
+    /**
+     * The fields every product read asks for. Shared by both queries on purpose: a
+     * one-product refresh that pulled a smaller shape than the full sweep would write
+     * a half-filled row over a complete one.
+     */
+    private const PRODUCT_FIELDS = <<<'GQL'
+      id title handle status tags productType
+      featuredImage { url }
+      multiplier: metafield(namespace: "product", key: "multiplier") { value }
+      collections(first: 10) { nodes { title } }
+      variants(first: 100) {
+        nodes { id title sku price availableForSale image { url } }
       }
-    }
     GQL;
+
+    private const PAGE_QUERY = 'query($cursor: String) { products(first: 50, after: $cursor) { pageInfo { hasNextPage endCursor } nodes {'
+        .self::PRODUCT_FIELDS
+        .'} } }';
+
+    private const ONE_QUERY = 'query($id: ID!) { product(id: $id) {'
+        .self::PRODUCT_FIELDS
+        .'} }';
 
     public function __construct(private readonly ShopifyAdminClient $client) {}
 
@@ -73,6 +79,42 @@ class ProductSyncService
         } while ($cursor !== null);
 
         return $count;
+    }
+
+    /**
+     * Refresh ONE product — what a `products/*` webhook actually reports.
+     *
+     * Re-reading the whole catalogue for a single price change took 20+ seconds per webhook
+     * and put a full sweep of Shopify behind every edit an operator makes; a single network
+     * blip anywhere in that sweep failed the job. Returns false when Shopify no longer has
+     * the product (deleted between the webhook and this read) — the caller has nothing to do
+     * about that, so it is not an error.
+     */
+    public function refreshOne(string $productId): bool
+    {
+        if (! $this->client->isConnected()) {
+            Log::warning('shopify.products.not_connected');
+
+            return false;
+        }
+
+        $numericId = ShopifyId::numeric($productId);
+        if ($numericId === '') {
+            return false;
+        }
+
+        $result = $this->client->graphql(self::ONE_QUERY, ['id' => 'gid://shopify/Product/'.$numericId]);
+        $node = $result['data']['product'] ?? null;
+
+        if (! is_array($node)) {
+            Log::info('shopify.products.not_found', ['product_id' => $numericId]);
+
+            return false;
+        }
+
+        $this->upsertProduct($node);
+
+        return true;
     }
 
     /**

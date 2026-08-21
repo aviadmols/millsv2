@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\WebhookEvent;
+use App\Modules\MillsSubscriptions\Services\PaidOrderIngestor;
 use App\Modules\MillsSubscriptions\Services\Shopify\ProductSyncService;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopInstaller;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -11,9 +12,9 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Routes a stored webhook to its handler (ARCHITECTURE.md §1b). Orders topics are
- * wired in Phase 4/5 (order sync + billing reconciliation); products/* refresh the
- * cache; app/uninstalled tears the connection down.
+ * Routes a stored webhook to its handler (ARCHITECTURE.md §1b). orders/paid turns
+ * a subscription checkout into a Subscription (PaidOrderIngestor); products/*
+ * refresh the cache; app/uninstalled tears the connection down.
  */
 class ProcessShopifyWebhookJob implements ShouldQueue
 {
@@ -24,7 +25,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         $this->onQueue('sync');
     }
 
-    public function handle(ProductSyncService $products, ShopInstaller $installer): void
+    public function handle(ProductSyncService $products, ShopInstaller $installer, PaidOrderIngestor $orders): void
     {
         $event = WebhookEvent::query()->find($this->webhookEventId);
         if ($event === null || $event->processed_at !== null) {
@@ -34,6 +35,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         try {
             match (true) {
                 $event->topic === 'app/uninstalled' => $installer->markUninstalled(),
+                $event->topic === 'orders/paid' => $orders->ingest((array) ($event->payload ?? [])),
                 str_starts_with((string) $event->topic, 'products/') => $this->handleProduct($event, $products),
                 default => Log::info('shopify.webhook.unhandled', ['topic' => $event->topic]),
             };
@@ -55,7 +57,7 @@ class ProcessShopifyWebhookJob implements ShouldQueue
         }
 
         if (isset($payload['id'])) {
-            $products->refreshAll(); // Phase 3 refines to a single-product fetch.
+            $products->refreshOne((string) $payload['id']);
         }
     }
 }

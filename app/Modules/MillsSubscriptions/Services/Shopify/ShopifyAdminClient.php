@@ -3,14 +3,15 @@
 namespace App\Modules\MillsSubscriptions\Services\Shopify;
 
 use App\Models\ShopifyConnection;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 
 /**
  * Single-store Admin API client (ARCHITECTURE.md §1b). The offline token is read
  * from the encrypted `shopify_connection` record; the API version is pinned in
- * config. 429/THROTTLED are retried with backoff. No per-shop factory (single
- * tenant).
+ * config. 429/THROTTLED, 5xx and transport failures are retried with backoff. No
+ * per-shop factory (single tenant).
  */
 class ShopifyAdminClient
 {
@@ -65,12 +66,25 @@ class ShopifyAdminClient
         // Full URLs are built per-call (baseUrl() + path) — a leading-slash path
         // with Http::baseUrl() would resolve against the host and drop /admin/api.
         return Http::withHeaders([
-                'X-Shopify-Access-Token' => (string) ($this->connection?->access_token ?? ''),
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ])
+            'X-Shopify-Access-Token' => (string) ($this->connection?->access_token ?? ''),
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+        ])
+            ->connectTimeout(15)
             ->timeout(30)
-            ->retry(3, 300, fn ($exception, $request) => optional($exception->response ?? null)->status() === 429, throw: false);
+            ->retry(3, 300, function ($exception) {
+                // Retrying only 429 was too narrow: a 10-second connect blip to Shopify —
+                // no response at all, so no status to inspect — failed the job outright, and
+                // twice in one day that is what put webhook jobs in failed_jobs. A transport
+                // failure and a 5xx are exactly the cases where trying again is the answer.
+                if ($exception instanceof ConnectionException) {
+                    return true;
+                }
+
+                $status = optional($exception->response ?? null)->status();
+
+                return $status === 429 || ($status !== null && $status >= 500);
+            }, throw: false);
     }
 
     private function baseUrl(): string
