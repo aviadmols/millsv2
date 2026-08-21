@@ -5,7 +5,9 @@ namespace App\Modules\MillsSubscriptions\Services;
 use App\Mail\OtpMail;
 use App\Models\Customer;
 use App\Models\OtpCode;
+use App\Models\Subscription;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyCustomerService;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
 use App\Modules\MillsSubscriptions\Support\SmsTemplate;
@@ -162,6 +164,8 @@ class OtpService
         }
 
         if ($accounts->count() > 1) {
+            $active = $this->activeSubscriptionCounts($accounts);
+
             return [
                 'ok' => true,
                 'needs_account_choice' => true,
@@ -169,6 +173,7 @@ class OtpService
                     'id' => $c->id,
                     'name' => $c->fullName(),
                     'email' => $c->email,
+                    'active_subscriptions' => $active[$c->id] ?? 0,
                 ])->values()->all(),
             ];
         }
@@ -219,6 +224,29 @@ class OtpService
 
         // A token's subject IS the Shopify id, so an account without one cannot be opened.
         return $local->filter(fn (Customer $c) => filled($c->shopify_customer_id))->values();
+    }
+
+    /**
+     * How many live subscriptions each of those accounts holds, in ONE query.
+     *
+     * The chooser lists two accounts that often share a name and differ only by an email
+     * the customer has long forgotten; the count is what tells them which one they came
+     * for. Counted per account rather than with a relation load so the chooser stays a
+     * single extra query no matter how many accounts the phone holds.
+     *
+     * @param  Collection<int, Customer>  $accounts
+     * @return array<int, int>
+     */
+    private function activeSubscriptionCounts(Collection $accounts): array
+    {
+        return Subscription::query()
+            ->whereIn('customer_id', $accounts->pluck('id')->all())
+            ->where('status', SubscriptionStatus::ACTIVE->value)
+            ->groupBy('customer_id')
+            ->selectRaw('customer_id, count(*) as total')
+            ->pluck('total', 'customer_id')
+            ->map(fn ($total) => (int) $total)
+            ->all();
     }
 
     /**

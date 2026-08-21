@@ -213,6 +213,47 @@ class LegacyLoginTest extends TestCase
         $this->assertArrayNotHasKey('token', $result);
     }
 
+    public function test_the_chooser_says_how_many_active_subscriptions_each_account_holds(): void
+    {
+        // Two accounts on one phone, one with a subscription and one without: the count is
+        // how the customer tells them apart, so it has to be on the chooser payload.
+        $this->fakeShopify([
+            $this->shopifyCustomer('900111', 'first@example.com', self::NOTE),
+            $this->shopifyCustomer('900222', 'second@example.com', ''),
+        ]);
+
+        $otp = app(OtpService::class);
+        $otp->request(self::PHONE, OtpService::CHANNEL_SMS);
+        $result = $otp->verify(self::PHONE, $this->sentCode(), OtpService::CHANNEL_SMS);
+
+        $accounts = collect($result['accounts']);
+
+        $this->assertSame(1, $accounts->firstWhere('email', 'first@example.com')['active_subscriptions']);
+        $this->assertSame(0, $accounts->firstWhere('email', 'second@example.com')['active_subscriptions']);
+    }
+
+    public function test_a_cancelled_subscription_is_not_counted_on_the_chooser(): void
+    {
+        // Only live subscriptions count — a cancelled one would send the customer into the
+        // account they already left.
+        $this->fakeShopify([
+            $this->shopifyCustomer('900111', 'first@example.com', self::NOTE),
+            $this->shopifyCustomer('900222', 'second@example.com', ''),
+        ]);
+
+        $otp = app(OtpService::class);
+        $otp->request(self::PHONE, OtpService::CHANNEL_SMS);
+        $listed = $otp->verify(self::PHONE, $this->sentCode(), OtpService::CHANNEL_SMS);
+
+        Subscription::query()->update(['status' => SubscriptionStatus::CANCELLED->value]);
+
+        $otp->request(self::PHONE, OtpService::CHANNEL_SMS);
+        $again = $otp->verify(self::PHONE, $this->sentCode(), OtpService::CHANNEL_SMS);
+
+        $this->assertSame(1, collect($listed['accounts'])->firstWhere('email', 'first@example.com')['active_subscriptions']);
+        $this->assertSame(0, collect($again['accounts'])->firstWhere('email', 'first@example.com')['active_subscriptions']);
+    }
+
     public function test_choosing_an_account_issues_the_token_for_that_account(): void
     {
         $this->fakeShopify([
