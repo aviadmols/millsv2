@@ -149,7 +149,27 @@ class CardUpdateService
             throw new RuntimeException('customer_not_found');
         }
 
-        $result = $this->payme->getBuyerKey((string) $session['payme_sale_id']);
+        try {
+            $result = $this->payme->getBuyerKey((string) $session['payme_sale_id']);
+        } catch (Throwable $e) {
+            /*
+             * PayMe refused to hand over the key ("Merchant not allowed to use this buyer",
+             * a 5xx, an outage). This throw used to escape as-is: RequestException is not a
+             * RuntimeException, so the callback's catch missed it and a customer who had
+             * just entered a real card got Laravel's raw 500 page (21 Aug).
+             *
+             * The ledger row deliberately stays PENDING — the card may well be captured at
+             * PayMe, and the reconciler (mills:reconcile-card-updates) or the admin retry
+             * can still recover it without asking the customer to type the card again.
+             */
+            SystemLog::error('billing', 'card update failed — PayMe refused get-buyer-key', array_merge(
+                ['session_id' => $sessionId],
+                $this->payme->getLastErrorContext(),
+            ), ['subscription_id' => $session['subscription_id'] ?? null, 'customer_id' => $customer->id]);
+
+            throw new RuntimeException('payme_rejected', 0, $e);
+        }
+
         $buyerKey = (string) ($result['buyer_key'] ?? '');
 
         if ($buyerKey === '') {

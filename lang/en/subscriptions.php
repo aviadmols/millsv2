@@ -149,6 +149,10 @@ return [
     'card_update_failed' => 'The card update failed',
     'card_update_failed_body' => 'The card was not saved. Nothing was changed — try again.',
     'sms_card_update' => 'Mills: to keep your subscription running, please update your payment card here: :url',
+    'ledger_retry_card_update' => 'Complete card update',
+    'ledger_retry_card_update_help' => 'The customer entered a card but our confirmation failed. This asks PayMe again whether the card was captured — no new charge, nothing asked of the customer.',
+    'ledger_retry_recovered' => 'Card confirmed — :count subscriptions unblocked',
+    'ledger_retry_failed' => 'PayMe still refuses (:reason). The row stays pending and the reconciler keeps trying.',
 
     'action_customer_portal' => "View the customer's personal area",
     'action_edit_upcoming' => 'Edit the upcoming order',

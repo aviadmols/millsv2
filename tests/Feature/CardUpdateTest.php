@@ -441,4 +441,81 @@ class CardUpdateTest extends TestCase
         // charge on the customer's card every time an admin glanced at this page.
         Http::assertNothingSent();
     }
+
+    // --- PayMe refusing the buyer_key ----------------------------------------
+
+    /**
+     * The 21 Aug incident: the customer entered a real card, PayMe answered get-buyer-key
+     * with HTTP 500 "Merchant not allowed to use this buyer", and because RequestException
+     * is not a RuntimeException the callback's catch missed it — the customer got Laravel's
+     * raw 500 page one second after typing their card number.
+     */
+    public function test_payme_refusing_the_buyer_key_shows_a_page_not_a_500(): void
+    {
+        [$customer, $subscription] = $this->scenario();
+
+        Http::fake([
+            'https://payme.test/generate-sale' => Http::response([
+                'status_code' => 0,
+                'payme_sale_id' => self::SALE_ID,
+                'sale_url' => 'https://payme.test/hosted/'.self::SALE_ID,
+            ]),
+            'https://payme.test/get-buyer-key' => Http::response([
+                'status_code' => 1,
+                'status_error_details' => 'Merchant not allowed to use this buyer',
+            ], 500),
+        ]);
+
+        $session = app(CardUpdateService::class)->createSession($customer, $subscription);
+
+        $response = $this->get('/storefront/payment-method/payme-callback?session_id='.$session['session_id']);
+
+        // A page, in Hebrew, that does NOT tell them to re-enter a card PayMe already holds.
+        $response->assertOk();
+        $response->assertSee('אין צורך להזין את הכרטיס שוב', false);
+
+        // The refusal is on the admin's screen with PayMe's own words — not only in Railway logs.
+        $this->assertDatabaseHas('system_logs', [
+            'level' => 'error',
+            'message' => 'card update failed — PayMe refused get-buyer-key',
+        ]);
+
+        // The row stays PENDING: the card may be captured at PayMe, and closing the row
+        // would throw away the only trace the reconciler can recover it from.
+        $ledger = Ledger::find(IdempotencyKey::cardUpdate($session['session_id']));
+        $this->assertSame(LedgerStatus::PENDING, $ledger->status);
+        $this->assertSame(PaymentState::NEEDS_CARD_UPDATE, $subscription->fresh()->payment_state);
+    }
+
+    public function test_a_refused_card_update_can_be_completed_later_without_the_customer(): void
+    {
+        [$customer, $subscription] = $this->scenario();
+
+        Http::fake([
+            'https://payme.test/generate-sale' => Http::response([
+                'status_code' => 0,
+                'payme_sale_id' => self::SALE_ID,
+                'sale_url' => 'https://payme.test/hosted/'.self::SALE_ID,
+            ]),
+            'https://payme.test/get-buyer-key' => Http::sequence()
+                ->push(['status_code' => 1, 'status_error_details' => 'Merchant not allowed to use this buyer'], 500)
+                ->push(['status_code' => 0, 'buyer_key' => self::BUYER_KEY, 'masked_card' => '**** 4242']),
+        ]);
+
+        $service = app(CardUpdateService::class);
+        $session = $service->createSession($customer, $subscription);
+
+        // First attempt: PayMe refuses. The customer sees the graceful page and leaves.
+        $this->get('/storefront/payment-method/payme-callback?session_id='.$session['session_id'])->assertOk();
+
+        // Once PayMe is fixed, the SAME session resolves from the ledger row — the admin
+        // retry (or the reconciler) finishes the update with no new card entry and no new charge.
+        $result = $service->consume($session['session_id']);
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame(1, $result['subscriptions_unblocked']);
+        $this->assertSame(PaymentState::PAYME, $subscription->fresh()->payment_state);
+        $this->assertSame(self::BUYER_KEY, $customer->fresh()->activePaymentMethod()->buyer_key);
+        $this->assertSame(LedgerStatus::SUCCEEDED, Ledger::find(IdempotencyKey::cardUpdate($session['session_id']))->status);
+    }
 }

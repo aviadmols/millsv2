@@ -149,6 +149,10 @@ return [
     'card_update_failed' => 'עדכון הכרטיס נכשל',
     'card_update_failed_body' => 'הכרטיס לא נשמר. שום דבר לא שונה — נסה שוב.',
     'sms_card_update' => 'Mills: כדי להמשיך את המנוי, יש לעדכן את אמצעי התשלום כאן: :url',
+    'ledger_retry_card_update' => 'השלם עדכון כרטיס',
+    'ledger_retry_card_update_help' => 'הלקוח הזין כרטיס אך האישור מולנו נכשל. הפעולה שואלת את PayMe שוב אם הכרטיס נקלט — בלי לחייב ובלי להטריח את הלקוח.',
+    'ledger_retry_recovered' => 'הכרטיס אושר — :count מנויים שוחררו לחיוב',
+    'ledger_retry_failed' => 'PayMe עדיין מסרב (:reason). השורה נשארת ממתינה וה-reconciler ימשיך לנסות.',
 
     'action_customer_portal' => 'צפה באזור האישי של הלקוח',
     'action_edit_upcoming' => 'ערוך את ההזמנה הבאה',
