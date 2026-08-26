@@ -7,6 +7,7 @@ use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Support\Timeline;
+use Filament\Facades\Filament;
 use Tests\TestCase;
 
 /**
@@ -149,6 +150,48 @@ class TranslationsTest extends TestCase
                 $key,
                 __($key),
                 "{$origin} renders as the raw key \"{$key}\" — add it to lang/he and lang/en",
+            );
+        }
+    }
+
+    public function test_every_screen_in_the_sidebar_is_named_in_hebrew(): void
+    {
+        /*
+         * Filament invents a navigation label from the MODEL NAME when a resource does not
+         * define one — so a resource with no getNavigationLabel() silently ships "Customers",
+         * "Dogs", "Products" into a Hebrew sidebar. No lang file is missing and no key is
+         * unused, which is why every other check here passed while four screens sat in
+         * English for months.
+         */
+        app()->setLocale('he');
+
+        $panel = Filament::getPanel('admin');
+
+        foreach ($panel->getResources() as $resource) {
+            $this->assertMatchesRegularExpression(
+                '/\p{Hebrew}/u',
+                $resource::getNavigationLabel(),
+                $resource.' has no Hebrew navigation label — add getNavigationLabel() returning a lang key',
+            );
+
+            $this->assertMatchesRegularExpression(
+                '/\p{Hebrew}/u',
+                $resource::getModelLabel(),
+                $resource.' has no Hebrew model label — page titles and buttons will read in English',
+            );
+        }
+
+        foreach ($panel->getPages() as $page) {
+            $title = (string) $page::getNavigationLabel();
+
+            if ($title === '') {
+                continue;
+            }
+
+            $this->assertMatchesRegularExpression(
+                '/\p{Hebrew}/u',
+                $title,
+                $page.' has no Hebrew navigation label',
             );
         }
     }

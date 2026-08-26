@@ -31,6 +31,18 @@ class SubscriptionResource extends Resource
         return __('subscriptions.title');
     }
 
+    // Without these, Filament builds page titles, breadcrumbs and buttons from the model
+    // name — so the sidebar read "מנויים" and the screen behind it said "Edit subscription".
+    public static function getModelLabel(): string
+    {
+        return __('subscriptions.singular');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('subscriptions.title');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return SubscriptionForm::configure($schema);

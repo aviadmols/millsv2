@@ -22,6 +22,21 @@ class DogResource extends Resource
 
     protected static ?int $navigationSort = 30;
 
+    public static function getNavigationLabel(): string
+    {
+        return __('dogs.title');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('dogs.singular');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('dogs.title');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return DogForm::configure($schema);

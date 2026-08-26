@@ -14,41 +14,41 @@ class CustomersTable
     {
         return $table
             ->columns([
-                TextColumn::make('shopify_customer_id')
+                TextColumn::make('shopify_customer_id')->label(__('customers.shopify_id'))
                     ->searchable(),
                 TextColumn::make('email')
                     ->label('Email address')
                     ->searchable(),
-                TextColumn::make('phone')
+                TextColumn::make('phone')->label(__('customers.phone'))
                     ->searchable(),
-                TextColumn::make('first_name')
+                TextColumn::make('first_name')->label(__('customers.first_name'))
                     ->searchable(),
-                TextColumn::make('last_name')
+                TextColumn::make('last_name')->label(__('customers.last_name'))
                     ->searchable(),
                 TextColumn::make('address1')
                     ->searchable(),
                 TextColumn::make('address2')
                     ->searchable(),
-                TextColumn::make('city')
+                TextColumn::make('city')->label(__('customers.city'))
                     ->searchable(),
-                TextColumn::make('province')
+                TextColumn::make('province')->label(__('customers.province'))
                     ->searchable(),
-                TextColumn::make('country')
+                TextColumn::make('country')->label(__('customers.country'))
                     ->searchable(),
-                TextColumn::make('zip')
+                TextColumn::make('zip')->label(__('customers.zip'))
                     ->searchable(),
-                TextColumn::make('locale')
+                TextColumn::make('locale')->label(__('customers.locale'))
                     ->searchable(),
-                TextColumn::make('address_pushed_at')
+                TextColumn::make('address_pushed_at')->label(__('customers.address_pushed_at'))
                     ->dateTime()
                     ->sortable(),
-                TextColumn::make('legacy_shopify_gid')
+                TextColumn::make('legacy_shopify_gid')->label(__('customers.legacy_id'))
                     ->searchable(),
-                TextColumn::make('created_at')
+                TextColumn::make('created_at')->label(__('customers.created_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
+                TextColumn::make('updated_at')->label(__('customers.updated_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),

@@ -2,6 +2,7 @@
 
 return [
     'title' => 'מנויים',
+    'singular' => 'מנוי',
     'customer' => 'לקוח',
     'status' => 'סטטוס',
     'payment' => 'תשלום',

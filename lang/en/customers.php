@@ -26,4 +26,23 @@ return [
     'push_not_found' => 'No Shopify customer with that number',
     'push_not_found_help' => 'Nothing in the store matches :phone — it may be saved there under a different number, or only on an order rather than on the customer.',
     'push_failed' => 'Could not add the customer',
+
+    'title' => 'Customers',
+    'singular' => 'Customer',
+
+    'shopify_id' => 'Shopify id',
+    'email' => 'Email',
+    'phone' => 'Phone',
+    'first_name' => 'First name',
+    'last_name' => 'Last name',
+    'city' => 'City',
+    'province' => 'Province',
+    'country' => 'Country',
+    'zip' => 'Postal code',
+    'locale' => 'Language',
+    'address_pushed_at' => 'Address pushed to Shopify',
+    'meta' => 'Extra data',
+    'legacy_id' => 'Legacy id',
+    'created_at' => 'Created',
+    'updated_at' => 'Updated',
 ];

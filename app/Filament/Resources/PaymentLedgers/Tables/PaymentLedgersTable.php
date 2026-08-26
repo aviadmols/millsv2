@@ -21,40 +21,53 @@ class PaymentLedgersTable
     {
         return $table
             ->columns([
-                TextColumn::make('subscription.id')
+                TextColumn::make('subscription.id')->label(__('ledgers.subscription'))
                     ->searchable(),
-                TextColumn::make('customer.id')
+                TextColumn::make('customer.id')->label(__('ledgers.customer'))
                     ->searchable(),
-                TextColumn::make('paymentMethod.id')
+                TextColumn::make('paymentMethod.id')->label(__('ledgers.payment_method'))
                     ->searchable(),
-                TextColumn::make('context')
-                    ->searchable(),
-                TextColumn::make('idempotency_key')
-                    ->searchable(),
-                TextColumn::make('status')
+                // Both of these are enum values. Rendered raw they read "card_update" and
+                // "retry_scheduled" — English, in the middle of a Hebrew table.
+                TextColumn::make('context')->label(__('ledgers.context'))
+                    ->formatStateUsing(fn ($state) => self::translated('subscriptions.ctx_', $state))
                     ->badge()
+                    ->color('gray')
                     ->searchable(),
-                TextColumn::make('amount')
+                TextColumn::make('idempotency_key')->label(__('ledgers.idempotency_key'))
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('status')->label(__('ledgers.status'))
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => self::translated('subscriptions.ledger_', $state))
+                    ->color(fn ($state) => match ((string) ($state->value ?? $state)) {
+                        'succeeded' => 'success',
+                        'pending', 'retry_scheduled' => 'warning',
+                        'refunded' => 'gray',
+                        default => 'danger',
+                    })
+                    ->searchable(),
+                TextColumn::make('amount')->label(__('ledgers.amount'))
                     ->numeric()
                     ->sortable(),
-                TextColumn::make('currency')
+                TextColumn::make('currency')->label(__('ledgers.currency'))
                     ->searchable(),
-                TextColumn::make('payme_transaction_id')
+                TextColumn::make('payme_transaction_id')->label(__('ledgers.payme_transaction_id'))
                     ->searchable(),
-                TextColumn::make('shopify_order_id')
+                TextColumn::make('shopify_order_id')->label(__('ledgers.shopify_order_id'))
                     ->searchable(),
-                TextColumn::make('draft_order_id')
+                TextColumn::make('draft_order_id')->label(__('ledgers.draft_order_id'))
                     ->searchable(),
-                TextColumn::make('failure_code')
+                TextColumn::make('failure_code')->label(__('ledgers.failure_code'))
                     ->searchable(),
-                TextColumn::make('executed_at')
+                TextColumn::make('executed_at')->label(__('ledgers.executed_at'))
                     ->dateTime()
                     ->sortable(),
-                TextColumn::make('created_at')
+                TextColumn::make('created_at')->label(__('ledgers.created_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
+                TextColumn::make('updated_at')->label(__('ledgers.updated_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -71,6 +84,15 @@ class PaymentLedgersTable
                     DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    /** An enum value as its Hebrew label, degrading to the raw value rather than to a key. */
+    private static function translated(string $prefix, mixed $state): string
+    {
+        $value = (string) ($state->value ?? $state);
+        $key = $prefix.$value;
+
+        return __($key) === $key ? $value : __($key);
     }
 
     /**

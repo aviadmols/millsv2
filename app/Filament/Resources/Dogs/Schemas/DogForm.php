@@ -19,39 +19,39 @@ class DogForm
             // two columns, which left every field at half width with dead space beside it.
             ->columns(1)
             ->components([
-                Select::make('customer_id')
+                Select::make('customer_id')->label(__('dogs.customer'))
                     ->relationship('customer', 'id')
                     ->required(),
-                Select::make('subscription_id')
+                Select::make('subscription_id')->label(__('dogs.subscription'))
                     ->relationship('subscription', 'id'),
-                TextInput::make('name'),
-                TextInput::make('sex')
+                TextInput::make('name')->label(__('dogs.name')),
+                TextInput::make('sex')->label(__('dogs.sex'))
                     ->numeric(),
-                TextInput::make('age')
+                TextInput::make('age')->label(__('dogs.age'))
                     ->numeric(),
-                TextInput::make('weight')
+                TextInput::make('weight')->label(__('dogs.weight'))
                     ->numeric(),
                 AllergySelect::make()
                     ->columnSpanFull(),
-                TextInput::make('activity')
+                TextInput::make('activity')->label(__('dogs.activity'))
                     ->numeric(),
-                TextInput::make('body')
+                TextInput::make('body')->label(__('dogs.body'))
                     ->numeric(),
-                TextInput::make('calories_per_day')
+                TextInput::make('calories_per_day')->label(__('dogs.calories_per_day'))
                     ->numeric(),
-                DatePicker::make('birth_date'),
-                Toggle::make('double_food')
+                DatePicker::make('birth_date')->label(__('dogs.birth_date')),
+                Toggle::make('double_food')->label(__('dogs.double_food'))
                     ->required(),
-                TextInput::make('avatar'),
-                TextInput::make('status')
+                TextInput::make('avatar')->label(__('dogs.avatar')),
+                TextInput::make('status')->label(__('dogs.status'))
                     ->required()
                     ->default('active'),
-                TextInput::make('subscription_status'),
-                Textarea::make('selected_variants')
+                TextInput::make('subscription_status')->label(__('dogs.subscription_status')),
+                Textarea::make('selected_variants')->label(__('dogs.selected_variants'))
                     ->columnSpanFull(),
-                Textarea::make('addons_products')
+                Textarea::make('addons_products')->label(__('dogs.addons_products'))
                     ->columnSpanFull(),
-                TextInput::make('legacy_shopify_gid'),
+                TextInput::make('legacy_shopify_gid')->label(__('dogs.legacy_id')),
             ]);
     }
 }

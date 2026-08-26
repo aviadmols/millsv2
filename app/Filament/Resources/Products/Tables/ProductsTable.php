@@ -15,26 +15,26 @@ class ProductsTable
     {
         return $table
             ->columns([
-                TextColumn::make('shopify_product_id')
+                TextColumn::make('shopify_product_id')->label(__('products.shopify_id'))
                     ->searchable(),
-                TextColumn::make('title')
+                TextColumn::make('title')->label(__('products.product_title'))
                     ->searchable(),
-                TextColumn::make('handle')
+                TextColumn::make('handle')->label(__('products.handle'))
                     ->searchable(),
-                TextColumn::make('status')
+                TextColumn::make('status')->label(__('products.status'))
                     ->searchable(),
-                ImageColumn::make('image_url'),
-                TextColumn::make('shopify_updated_at')
+                ImageColumn::make('image_url')->label(__('products.image')),
+                TextColumn::make('shopify_updated_at')->label(__('products.shopify_updated_at'))
                     ->dateTime()
                     ->sortable(),
-                TextColumn::make('synced_at')
+                TextColumn::make('synced_at')->label(__('products.synced_at'))
                     ->dateTime()
                     ->sortable(),
-                TextColumn::make('created_at')
+                TextColumn::make('created_at')->label(__('products.created_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
+                TextColumn::make('updated_at')->label(__('products.updated_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),

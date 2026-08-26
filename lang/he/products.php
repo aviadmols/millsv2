@@ -12,4 +12,18 @@ return [
 
     'not_connected_title' => 'האפליקציה לא מחוברת ל-Shopify',
     'not_connected_body' => 'אין טוקן פעיל. התקן מחדש את האפליקציה כדי לחבר: /shopify/install?shop=millsforpets.myshopify.com',
+
+    'title' => 'מוצרים',
+    'singular' => 'מוצר',
+
+    'shopify_id' => 'מזהה בשופיפיי',
+    'product_title' => 'שם המוצר',
+    'handle' => 'מזהה כתובת',
+    'status' => 'סטטוס',
+    'image' => 'תמונה',
+    'tags' => 'תגיות',
+    'shopify_updated_at' => 'עודכן בשופיפיי',
+    'synced_at' => 'סונכרן',
+    'created_at' => 'נוצר',
+    'updated_at' => 'עודכן',
 ];

@@ -22,6 +22,21 @@ class CustomerResource extends Resource
 
     protected static ?int $navigationSort = 20;
 
+    public static function getNavigationLabel(): string
+    {
+        return __('customers.title');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('customers.singular');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('customers.title');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return CustomerForm::configure($schema);

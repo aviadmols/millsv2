@@ -2,6 +2,7 @@
 
 return [
     'title' => 'Subscriptions',
+    'singular' => 'Subscription',
     'customer' => 'Customer',
     'status' => 'Status',
     'payment' => 'Payment',

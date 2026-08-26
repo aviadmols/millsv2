@@ -15,48 +15,48 @@ class DogsTable
     {
         return $table
             ->columns([
-                TextColumn::make('customer.id')
+                TextColumn::make('customer.id')->label(__('dogs.customer'))
                     ->searchable(),
-                TextColumn::make('subscription.id')
+                TextColumn::make('subscription.id')->label(__('dogs.subscription'))
                     ->searchable(),
-                TextColumn::make('name')
+                TextColumn::make('name')->label(__('dogs.name'))
                     ->searchable(),
-                TextColumn::make('sex')
+                TextColumn::make('sex')->label(__('dogs.sex'))
                     ->numeric()
                     ->sortable(),
-                TextColumn::make('age')
+                TextColumn::make('age')->label(__('dogs.age'))
                     ->numeric()
                     ->sortable(),
-                TextColumn::make('weight')
+                TextColumn::make('weight')->label(__('dogs.weight'))
                     ->numeric()
                     ->sortable(),
-                TextColumn::make('activity')
+                TextColumn::make('activity')->label(__('dogs.activity'))
                     ->numeric()
                     ->sortable(),
-                TextColumn::make('body')
+                TextColumn::make('body')->label(__('dogs.body'))
                     ->numeric()
                     ->sortable(),
-                TextColumn::make('calories_per_day')
+                TextColumn::make('calories_per_day')->label(__('dogs.calories_per_day'))
                     ->numeric()
                     ->sortable(),
-                TextColumn::make('birth_date')
+                TextColumn::make('birth_date')->label(__('dogs.birth_date'))
                     ->date()
                     ->sortable(),
-                IconColumn::make('double_food')
+                IconColumn::make('double_food')->label(__('dogs.double_food'))
                     ->boolean(),
-                TextColumn::make('avatar')
+                TextColumn::make('avatar')->label(__('dogs.avatar'))
                     ->searchable(),
-                TextColumn::make('status')
+                TextColumn::make('status')->label(__('dogs.status'))
                     ->searchable(),
-                TextColumn::make('subscription_status')
+                TextColumn::make('subscription_status')->label(__('dogs.subscription_status'))
                     ->searchable(),
-                TextColumn::make('legacy_shopify_gid')
+                TextColumn::make('legacy_shopify_gid')->label(__('dogs.legacy_id'))
                     ->searchable(),
-                TextColumn::make('created_at')
+                TextColumn::make('created_at')->label(__('dogs.created_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
+                TextColumn::make('updated_at')->label(__('dogs.updated_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),

@@ -22,6 +22,21 @@ class PaymentLedgerResource extends Resource
 
     protected static ?int $navigationSort = 50;
 
+    public static function getNavigationLabel(): string
+    {
+        return __('ledgers.title');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('ledgers.singular');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('ledgers.title');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return PaymentLedgerForm::configure($schema);

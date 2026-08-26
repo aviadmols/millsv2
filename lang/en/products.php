@@ -12,4 +12,18 @@ return [
 
     'not_connected_title' => 'App is not connected to Shopify',
     'not_connected_body' => 'No active token. Reinstall the app to connect: /shopify/install?shop=millsforpets.myshopify.com',
+
+    'title' => 'Products',
+    'singular' => 'Product',
+
+    'shopify_id' => 'Shopify id',
+    'product_title' => 'Title',
+    'handle' => 'Handle',
+    'status' => 'Status',
+    'image' => 'Image',
+    'tags' => 'Tags',
+    'shopify_updated_at' => 'Updated in Shopify',
+    'synced_at' => 'Synced',
+    'created_at' => 'Created',
+    'updated_at' => 'Updated',
 ];
