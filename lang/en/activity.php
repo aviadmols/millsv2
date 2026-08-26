@@ -24,6 +24,14 @@ return [
     'kind_address_updated' => 'Address updated',
     'kind_dog_updated' => 'Dog updated',
     'kind_note' => 'Note',
+    'kind_admin_note' => 'Staff note',
+    'kind_generic' => 'Activity',
+
+    'add_note' => 'Add note',
+    'add_note_heading' => 'Add a note to this subscription\'s timeline',
+    'add_note_field' => 'Note',
+    'add_note_save' => 'Save note',
+    'add_note_saved' => 'The note was added to the timeline',
 
     'actor_system' => 'System',
     'actor_customer' => 'Customer',

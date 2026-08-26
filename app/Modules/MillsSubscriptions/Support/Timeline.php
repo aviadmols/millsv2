@@ -28,6 +28,16 @@ final class Timeline
 
     public const KIND_NOTE = 'note';
 
+    /**
+     * A free-text note an admin pinned to the timeline. details: {note}.
+     *
+     * Its OWN kind, separate from KIND_NOTE (which the system writes for its own
+     * remarks): "a person wrote this by hand" and "the biller left a breadcrumb" are
+     * different rows in any history worth reading, and only the person's row should be
+     * rendered as their prose.
+     */
+    public const KIND_ADMIN_NOTE = 'admin_note';
+
     /** A quiz became a real dog on a real customer — where a subscription actually begins. */
     public const KIND_QUIZ_LINKED = 'quiz_linked';
 

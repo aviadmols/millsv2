@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Activity\Tables;
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Models\ActivityEvent;
 use App\Modules\MillsSubscriptions\Support\Timeline;
+use App\Support\Ui\EventPresenter;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -114,126 +115,33 @@ class ActivityTable
             Timeline::KIND_STATUS_CHANGED,
             Timeline::KIND_ADDRESS_UPDATED,
             Timeline::KIND_DOG_UPDATED,
+            Timeline::KIND_ADMIN_NOTE,
             Timeline::KIND_NOTE,
         ];
     }
 
     private static function label(string $kind): string
     {
-        $key = 'activity.kind_'.$kind;
-
-        return __($key) === $key ? str_replace('_', ' ', $kind) : __($key);
+        return EventPresenter::labelFor($kind);
     }
 
     /** "admin:7" reads as a person; "system" and "customer" read as themselves. */
     private static function actorLabel(string $actor): string
     {
-        if (str_starts_with($actor, 'admin:')) {
-            return __('activity.actor_admin', ['id' => substr($actor, 6)]);
-        }
-
-        $key = 'activity.actor_'.$actor;
-
-        return __($key) === $key ? $actor : __($key);
+        return EventPresenter::actorLabel($actor);
     }
 
     /**
      * The one-line story of the event.
      *
-     * Built from `details`, whose shape differs per kind — so each kind gets the sentence it
-     * deserves, and anything unrecognised falls back to a readable key: value list rather
-     * than to raw JSON.
+     * Shared with the timeline on the subscription screen (EventPresenter): the same event
+     * must not read one way in the feed and another way on the subscription it belongs to.
+     * A note carries no summary — its prose IS the content, so it is shown instead.
      */
     private static function summarise(ActivityEvent $record): string
     {
-        $d = (array) ($record->details ?? []);
+        $summary = EventPresenter::summarize($record);
 
-        return match ($record->kind) {
-            Timeline::KIND_CHARGE_SUCCEEDED => __('activity.sum_charged', [
-                'amount' => '₪'.number_format((float) ($d['amount'] ?? 0), 2),
-            ]),
-            Timeline::KIND_CHARGE_FAILED => __('activity.sum_charge_failed', [
-                'reason' => (string) ($d['failure_code'] ?? $d['status'] ?? '—'),
-            ]),
-            Timeline::KIND_CARD_UPDATED => __('activity.sum_card_updated', [
-                'count' => (int) ($d['subscriptions_unblocked'] ?? 0),
-            ]).(($d['recovered_by_reconciliation'] ?? false) ? ' · '.__('activity.sum_recovered') : ''),
-            Timeline::KIND_QUIZ_LINKED => __('activity.sum_quiz', [
-                'dog' => (string) ($d['dog_name'] ?? '—'),
-                'weight' => (string) ($d['weight'] ?? '?'),
-            ]),
-            Timeline::KIND_SUBSCRIPTION_CREATED => __('activity.sum_subscription_created', [
-                'source' => (string) ($d['source'] ?? '—'),
-                'dogs' => (int) ($d['dogs'] ?? 0),
-            ]),
-            Timeline::KIND_ORDER_CREATED => __('activity.sum_order', [
-                'order' => (string) ($d['shopify_order_id'] ?? $d['order'] ?? '—'),
-            ]),
-            Timeline::KIND_STATUS_CHANGED => self::statusSummary($d),
-            Timeline::KIND_ADDRESS_UPDATED => __('activity.sum_address'),
-            default => self::readableDetails($d),
-        };
-    }
-
-    /**
-     * A status change, as written by transitionTo(): model, from, to, plus whatever context
-     * the caller passed (a pause reason, for instance).
-     *
-     * @param  array<string, mixed>  $d
-     */
-    private static function statusSummary(array $d): string
-    {
-        if (isset($d['payment_state'])) {
-            return __('activity.sum_payment_state', ['state' => (string) $d['payment_state']]);
-        }
-
-        $from = (string) ($d['from'] ?? '');
-        $to = (string) ($d['to'] ?? '');
-
-        if ($to === '') {
-            return self::readableDetails($d);
-        }
-
-        $line = __('activity.sum_status', [
-            'model' => self::modelLabel((string) ($d['model'] ?? '')),
-            'from' => self::statusLabel($from),
-            'to' => self::statusLabel($to),
-        ]);
-
-        $reason = trim((string) ($d['reason'] ?? ''));
-
-        return $reason === '' ? $line : $line.' — '.$reason;
-    }
-
-    private static function statusLabel(string $status): string
-    {
-        $key = 'subscriptions.status_'.$status;
-
-        return $status === '' ? '—' : (__($key) === $key ? $status : __($key));
-    }
-
-    private static function modelLabel(string $model): string
-    {
-        $key = 'activity.model_'.strtolower($model);
-
-        return __($key) === $key ? $model : __($key);
-    }
-
-    /** @param array<string, mixed> $d */
-    private static function readableDetails(array $d): string
-    {
-        if ($d === []) {
-            return '—';
-        }
-
-        $parts = [];
-        foreach ($d as $key => $value) {
-            if (is_array($value) || is_object($value)) {
-                continue;   // nested payloads belong in the detail view, not a table cell
-            }
-            $parts[] = str_replace('_', ' ', (string) $key).': '.(is_bool($value) ? ($value ? 'yes' : 'no') : (string) $value);
-        }
-
-        return $parts === [] ? '—' : implode(' · ', $parts);
+        return $summary === '' ? (EventPresenter::note($record) ?? '—') : $summary;
     }
 }

@@ -24,6 +24,14 @@ return [
     'kind_address_updated' => 'כתובת עודכנה',
     'kind_dog_updated' => 'כלב עודכן',
     'kind_note' => 'הערה',
+    'kind_admin_note' => 'הערה של צוות',
+    'kind_generic' => 'פעילות',
+
+    'add_note' => 'הוסף הערה',
+    'add_note_heading' => 'הוספת הערה ליומן המנוי',
+    'add_note_field' => 'ההערה',
+    'add_note_save' => 'שמור הערה',
+    'add_note_saved' => 'ההערה נוספה ליומן',
 
     'actor_system' => 'המערכת',
     'actor_customer' => 'הלקוח',

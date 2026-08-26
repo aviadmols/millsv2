@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Subscriptions\Schemas;
 
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
+use App\Models\ActivityEvent;
 use App\Models\Dog;
 use App\Models\PaymentMethod;
 use App\Models\Subscription;
@@ -12,16 +13,21 @@ use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Services\Shopify\OrderHistoryService;
 use App\Modules\MillsSubscriptions\Support\SubscriptionPricing;
+use App\Modules\MillsSubscriptions\Support\Timeline;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Textarea;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ViewEntry;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Throwable;
 
 /**
@@ -283,7 +289,20 @@ class SubscriptionInfolist
                                 ->color('gray'),
                             TextEntry::make('amount')->label(__('subscriptions.price'))->money('ILS')->placeholder('—'),
                             TextEntry::make('status')->label(__('subscriptions.status'))->badge()
-                                ->color(fn ($state) => in_array((string) ($state->value ?? $state), ['succeeded'], true) ? 'success' : 'danger'),
+                                // Was rendering the raw enum — "succeeded" / "retry_scheduled"
+                                // in English, in the middle of a Hebrew billing history.
+                                ->formatStateUsing(function ($state) {
+                                    $value = (string) ($state->value ?? $state);
+                                    $key = 'subscriptions.ledger_'.$value;
+
+                                    return __($key) === $key ? $value : __($key);
+                                })
+                                ->color(fn ($state) => match ((string) ($state->value ?? $state)) {
+                                    'succeeded' => 'success',
+                                    'pending', 'retry_scheduled' => 'warning',
+                                    'refunded' => 'gray',
+                                    default => 'danger',
+                                }),
                             TextEntry::make('shopify_order_id')
                                 ->label(__('subscriptions.created_order'))
                                 ->placeholder('—')
@@ -293,7 +312,81 @@ class SubscriptionInfolist
                                 ->color(fn ($state) => $state ? 'primary' : 'gray'),
                         ]),
                 ]),
+
+            /*
+             * The history, as a timeline.
+             *
+             * The Activity screen already lists every event in the system; what was missing
+             * was the answer to "what happened to THIS subscription" without leaving the
+             * page and filtering for it. The "+ הוסף הערה" action sits on this heading
+             * rather than in the page chrome, so a note lands where it is read.
+             */
+            Section::make(__('activity.title'))
+                ->key('timeline')
+                ->collapsible()
+                ->headerActions([
+                    Action::make('addNote')
+                        ->label(__('activity.add_note'))
+                        ->icon(Heroicon::OutlinedPlus)
+                        ->color('gray')
+                        ->modalHeading(__('activity.add_note_heading'))
+                        ->modalSubmitActionLabel(__('activity.add_note_save'))
+                        ->schema([
+                            Textarea::make('note')
+                                ->label(__('activity.add_note_field'))
+                                ->rows(4)
+                                ->required()
+                                ->maxLength(2000),
+                        ])
+                        ->action(function (array $data, Subscription $record) {
+                            $note = trim((string) ($data['note'] ?? ''));
+
+                            if ($note === '') {
+                                return;
+                            }
+
+                            Timeline::record(
+                                Timeline::KIND_ADMIN_NOTE,
+                                ['note' => mb_substr($note, 0, 2000)],
+                                $record->id,
+                                $record->customer_id,
+                                // Who wrote it, by name — a note signed "system" is worthless
+                                // to the next person trying to understand a decision.
+                                Timeline::admin((int) (Auth::id() ?? 0)),
+                            );
+
+                            Notification::make()->title(__('activity.add_note_saved'))->success()->send();
+                        }),
+                ])
+                ->schema([
+                    ViewEntry::make('timeline')
+                        ->hiddenLabel()
+                        ->view('filament.infolists.timeline')
+                        ->state(fn (Subscription $record) => self::timelineEvents($record)),
+                ]),
         ];
+    }
+
+    /**
+     * This subscription's events, plus the customer-level ones that have no subscription
+     * of their own (an address change, a card update recorded against the person).
+     *
+     * Scoped with a NULL check rather than by customer alone: a customer with two
+     * subscriptions would otherwise read the other one's charges on this page.
+     *
+     * @return Collection<int, ActivityEvent>
+     */
+    private static function timelineEvents(Subscription $record): Collection
+    {
+        return ActivityEvent::query()
+            ->where(function ($query) use ($record) {
+                $query->where('subscription_id', $record->id)
+                    ->orWhere(fn ($q) => $q->whereNull('subscription_id')->where('customer_id', $record->customer_id));
+            })
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(100)
+            ->get();
     }
 
     /**
