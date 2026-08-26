@@ -61,6 +61,15 @@ class CardUpdateService
             throw new RuntimeException('no_subscription_found');
         }
 
+        // Hosted Fields is the v1 flow the store actually ran on: OUR page, OUR fields,
+        // tokenised in the browser, no verification sale and no ₪1. The hosted-page flow
+        // below needs get-buyer-key — which this PayMe account refuses ("Merchant not
+        // allowed to use this buyer", 21+26 Aug) — so when the Hosted Fields key is
+        // configured it always wins.
+        if ($this->hostedFieldsConfigured()) {
+            return $this->createHostedFieldsSession($customer, $subscription, $actor);
+        }
+
         // Fail before the ledger row, not after: a misconfigured environment must not leave
         // dangling `pending` rows for the reconciler to chew on forever.
         if (! $this->payme->isConfigured()) {
@@ -125,6 +134,121 @@ class CardUpdateService
             'subscription_id' => $subscription->id,
             'expires_in_seconds' => self::SESSION_TTL_SECONDS,
         ];
+    }
+
+    public function hostedFieldsConfigured(): bool
+    {
+        return trim((string) config('payme.hosted_fields_api_key', '')) !== '';
+    }
+
+    /** @return array{api_key: string, test_mode: bool} */
+    public function hostedFieldsConfig(): array
+    {
+        return [
+            'api_key' => trim((string) config('payme.hosted_fields_api_key', '')),
+            'test_mode' => (bool) config('payme.hosted_fields_test_mode', false),
+        ];
+    }
+
+    /**
+     * The Hosted Fields session: same envelope, but `hosted_url` is OUR form page and no
+     * money moves — the browser tokenises the card with PayMe directly, so there is no
+     * verification sale, no ledger row, and no get-buyer-key call to be refused.
+     *
+     * @return array<string, mixed>
+     */
+    private function createHostedFieldsSession(Customer $customer, Subscription $subscription, string $actor): array
+    {
+        $sessionId = (string) Str::uuid();
+
+        Cache::put($this->cacheKey($sessionId), [
+            'mode' => 'hosted_fields',
+            'customer_id' => $customer->id,
+            'subscription_id' => $subscription->id,
+            'actor' => $actor,
+        ], self::SESSION_TTL_SECONDS);
+
+        SystemLog::info('billing', 'card-update session opened (hosted fields)', [
+            'session_id' => $sessionId,
+            'actor' => $actor,
+        ], ['subscription_id' => $subscription->id, 'customer_id' => $customer->id]);
+
+        return [
+            'session_id' => $sessionId,
+            'mode' => 'hosted_fields',
+            'hosted_url' => route('storefront.payment-method.payme-form', ['session_id' => $sessionId]),
+            'return_url' => route('storefront.payment-method.payme-callback', ['session_id' => $sessionId]),
+            'subscription_id' => $subscription->id,
+            'expires_in_seconds' => self::SESSION_TTL_SECONDS,
+        ];
+    }
+
+    /**
+     * Peek at a session WITHOUT consuming it — the form page renders against this on GET,
+     * and only the token POST burns it. Peeking with pull() would make refreshing the page
+     * eat the session before the customer ever typed a digit.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function sessionForForm(string $sessionId): ?array
+    {
+        $session = Cache::get($this->cacheKey($sessionId));
+
+        return is_array($session) ? $session : null;
+    }
+
+    /**
+     * Store the token the browser got from PayMe Hosted Fields, and lift the wall.
+     *
+     * Cache only, single use, on purpose: a hosted-fields session moved no money, so there
+     * is no ledger row to fall back to and nothing for the reconciler to recover — the
+     * token either arrives here within the TTL or the customer starts over for free.
+     *
+     * @return array<string, mixed>
+     */
+    public function completeWithToken(string $sessionId, string $token, string $maskedCard = ''): array
+    {
+        $token = trim($token);
+
+        // A pasted card number must never reach the database pretending to be a token.
+        if ($token === '' || preg_match('/^\d{12,19}$/', preg_replace('/[\s-]/', '', $token) ?? '') === 1) {
+            throw new RuntimeException('invalid_token');
+        }
+
+        $session = Cache::pull($this->cacheKey($sessionId));
+
+        if (! is_array($session) || ($session['mode'] ?? '') !== 'hosted_fields') {
+            throw new RuntimeException('session_expired');
+        }
+
+        $customer = Customer::query()->find($session['customer_id']);
+        if ($customer === null) {
+            throw new RuntimeException('customer_not_found');
+        }
+
+        $this->storeBuyerKey($customer, $token, $maskedCard);
+        $lifted = $this->liftCardUpdateWall($customer);
+
+        $actor = (string) ($session['actor'] ?? Timeline::ACTOR_CUSTOMER);
+
+        // The raw token is the charging credential — log its fingerprint, never itself.
+        // Named 'credential_fingerprint': any key containing 'token' is redacted by
+        // PaymentContextMasker, and a sha256 is exactly the thing that is SAFE to keep.
+        SystemLog::info('billing', 'card updated (hosted fields) — wall lifted', [
+            'subscriptions_unblocked' => $lifted,
+            'credential_fingerprint' => hash('sha256', $token),
+            'actor' => $actor,
+        ], ['subscription_id' => $session['subscription_id'], 'customer_id' => $customer->id]);
+
+        Timeline::record(
+            Timeline::KIND_CARD_UPDATED,
+            ['subscriptions_unblocked' => $lifted, 'mode' => 'hosted_fields'],
+            $session['subscription_id'],
+            $customer->id,
+            $actor,
+        );
+
+        return ['ok' => true, 'subscription_id' => $session['subscription_id'], 'subscriptions_unblocked' => $lifted];
     }
 
     /**

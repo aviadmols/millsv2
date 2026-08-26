@@ -296,6 +296,14 @@ class EveryEndpointTest extends TestCase
         $this->get('/storefront/payment-method/payme-callback?session_id=nope')->assertOk();
         $this->hit['GET storefront/payment-method/payme-callback'] = 200;
 
+        // The Hosted Fields form and its token POST — an unknown session gets the
+        // expiry page / a 410, never a stack trace.
+        $this->get('/storefront/payment-method/payme-form?session_id=nope')->assertOk();
+        $this->hit['GET storefront/payment-method/payme-form'] = 200;
+
+        $this->postJson('/storefront/payment-method/payme-token', ['session_id' => 'nope', 'token' => 'tok-x'])->assertStatus(410);
+        $this->hit['POST storefront/payment-method/payme-token'] = 410;
+
         // ---------- coverage: did we miss anything? ----------
         $this->assertNoEndpointWasMissed();
     }

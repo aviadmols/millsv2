@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Customer;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Services\CardUpdateService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
 use Throwable;
@@ -18,6 +20,63 @@ use Throwable;
  */
 class PaymentMethodUpdateController extends Controller
 {
+    /**
+     * The Hosted Fields card form — the v1 page, ported. OUR layout and payer fields;
+     * the card inputs themselves are PayMe-hosted iframes, so card data never enters
+     * this app. GET only peeks at the session; the token POST is what consumes it.
+     */
+    public function form(Request $request, CardUpdateService $cardUpdate): View
+    {
+        $sessionId = (string) $request->query('session_id', '');
+        $session = $sessionId !== '' ? $cardUpdate->sessionForForm($sessionId) : null;
+        $customer = $session !== null ? Customer::query()->find($session['customer_id'] ?? null) : null;
+
+        return view('payment-method.update', [
+            'sessionAlive' => $session !== null,
+            'sessionId' => $sessionId,
+            'subscriptionId' => $session['subscription_id'] ?? null,
+            'hostedFields' => $cardUpdate->hostedFieldsConfig(),
+            'submitUrl' => route('storefront.payment-method.payme-token'),
+            'customer' => $customer,
+        ]);
+    }
+
+    /** The form's JSON POST: the PayMe token for the session's customer. */
+    public function storeToken(Request $request, CardUpdateService $cardUpdate): JsonResponse
+    {
+        $data = $request->validate([
+            'session_id' => ['required', 'string', 'max:64'],
+            'token' => ['required', 'string', 'max:191'],
+            'masked_card' => ['nullable', 'string', 'max:32'],
+        ]);
+
+        try {
+            $result = $cardUpdate->completeWithToken(
+                (string) $data['session_id'],
+                (string) $data['token'],
+                (string) ($data['masked_card'] ?? ''),
+            );
+
+            return response()->json([
+                'ok' => true,
+                'subscription_id' => $result['subscription_id'],
+                'message' => 'אמצעי התשלום עודכן בהצלחה.',
+            ]);
+        } catch (RuntimeException $e) {
+            SystemLog::warning('billing', 'hosted-fields card update rejected', [
+                'reason' => $e->getMessage(),
+            ]);
+
+            [$status, $message] = match ($e->getMessage()) {
+                'session_expired' => [410, 'פג תוקף הקישור. יש להתחיל את עדכון אמצעי התשלום מחדש.'],
+                'invalid_token' => [422, 'הטוקן שהתקבל אינו תקין. יש לנסות שוב.'],
+                default => [422, 'שמירת הכרטיס נכשלה. יש לנסות שוב.'],
+            };
+
+            return response()->json(['ok' => false, 'message' => $message], $status);
+        }
+    }
+
     public function callback(Request $request, CardUpdateService $cardUpdate): View
     {
         $sessionId = (string) $request->query('session_id', '');

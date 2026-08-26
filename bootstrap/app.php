@@ -35,6 +35,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // Railway terminates TLS at the edge and forwards HTTP + X-Forwarded-Proto.
         $middleware->trustProxies(at: '*');
 
+        // The Hosted Fields form runs inside an iframe on the storefront, where Safari
+        // blocks third-party cookies — so the CSRF session cookie may simply not exist.
+        // The single-use session_id in the body is the real credential here; CSRF would
+        // add nothing (no cookie authenticates this route) and 419s real customers.
+        $middleware->validateCsrfTokens(except: [
+            'storefront/payment-method/payme-token',
+        ]);
+
         $middleware->alias([
             'storefront.token' => VerifyStorefrontToken::class,
             'api.secret' => ValidateApiSecret::class,
