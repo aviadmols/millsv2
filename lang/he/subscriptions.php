@@ -49,6 +49,13 @@ return [
     'ctx_retry' => 'ניסיון חוזר',
     'ctx_manual' => 'ידני',
     'ctx_v1_import' => 'ייבוא ממערכת קודמת',
+    'ctx_card_update' => 'עדכון כרטיס',
+
+    'ledger_pending' => 'ממתין',
+    'ledger_succeeded' => 'הצליח',
+    'ledger_failed' => 'נכשל',
+    'ledger_retry_scheduled' => 'ניסיון חוזר מתוזמן',
+    'ledger_refunded' => 'זוכה',
     'date' => 'תאריך',
     'transaction' => 'עסקה',
 

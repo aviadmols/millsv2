@@ -39,6 +39,16 @@ class BillingRunsEndToEndTest extends TestCase
         config()->set('payme.seller_id', 'SELLER1');
 
         /*
+         * Freeze the clock inside the billing hour.
+         *
+         * mills:dispatch-due deliberately waits until the admin-chosen hour (09:00 Israel)
+         * before queueing anything — so this file passed in the afternoon and failed every
+         * night, which is exactly the kind of test nobody trusts and everybody re-runs. The
+         * hour is the command's behaviour, not this file's subject.
+         */
+        $this->travelTo(now()->setTime(10, 0));
+
+        /*
          * A REAL queue, not `sync`.
          *
          * The test suite runs on QUEUE_CONNECTION=sync, where dispatch() executes the job

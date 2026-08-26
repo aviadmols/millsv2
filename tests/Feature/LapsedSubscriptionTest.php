@@ -47,6 +47,10 @@ class LapsedSubscriptionTest extends TestCase
             'status_code' => 0,
             'payme_sale_id' => 'sale_1',
         ])]);
+
+        // Inside the billing hour: mills:dispatch-due queues nothing before 09:00 Israel,
+        // so without this the file passes in the afternoon and fails overnight.
+        $this->travelTo(now()->setTime(10, 0));
     }
 
     private function subscription(string $nextCharge, int $frequencyMonths = 1): Subscription

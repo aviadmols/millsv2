@@ -2,6 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Billing\IdempotencyKey;
+use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
+use App\Modules\MillsSubscriptions\Enums\PaymentState;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Support\Timeline;
 use Tests\TestCase;
 
 /**
@@ -68,5 +73,104 @@ class TranslationsTest extends TestCase
 
             $this->assertSame($enKeys, $heKeys, "lang/en/{$name} and lang/he/{$name} do not define the same keys");
         }
+    }
+
+    public function test_hebrew_strings_are_actually_in_hebrew(): void
+    {
+        /*
+         * Key parity says a Hebrew string EXISTS; it does not say it was translated. A copied
+         * English value passes every check above and ships an English sentence into a Hebrew
+         * screen. Brand and protocol names are the legitimate exception — "PayMe" and "API"
+         * are not translated by anyone.
+         */
+        $allowed = ['PayMe', 'API', 'Shopify', 'Webhook', 'CRON', 'SMS', 'iCount'];
+
+        foreach (glob(lang_path('he/*.php')) ?: [] as $file) {
+            foreach ($this->flatten(require $file, basename($file, '.php')) as $key => $value) {
+                // Strip placeholders (:count) and anything that is not a letter, then the
+                // names nobody translates. What is left must contain Hebrew.
+                $letters = preg_replace('/:[a-zA-Z_]+/', '', $value);
+                $letters = str_ireplace($allowed, '', $letters);
+                $letters = preg_replace('/[^\p{L}]/u', '', $letters ?? '');
+
+                if ($letters === '' || $letters === null) {
+                    continue;       // punctuation, a number, or a brand name alone
+                }
+
+                $this->assertMatchesRegularExpression(
+                    '/\p{Hebrew}/u',
+                    $value,
+                    "lang/he/{$key} has no Hebrew in it — it looks untranslated: \"{$value}\"",
+                );
+            }
+        }
+    }
+
+    public function test_every_dynamically_built_key_has_a_hebrew_translation(): void
+    {
+        /*
+         * The keys nothing else can catch. `__('subscriptions.ctx_'.$state)` is invisible to
+         * a key-parity check and to any IDE search, so a new enum case ships a screen that
+         * says "card_update" in the middle of Hebrew — which is exactly what it did.
+         */
+        app()->setLocale('he');
+
+        $expected = [];
+
+        foreach ((new \ReflectionClass(Timeline::class))->getConstants() as $name => $value) {
+            if (str_starts_with($name, 'KIND_')) {
+                $expected['activity.kind_'.$value] = "Timeline::{$name}";
+            }
+            if (str_starts_with($name, 'ACTOR_')) {
+                $expected['activity.actor_'.$value] = "Timeline::{$name}";
+            }
+        }
+
+        foreach (SubscriptionStatus::cases() as $case) {
+            $expected['subscriptions.status_'.$case->value] = 'SubscriptionStatus::'.$case->name;
+        }
+
+        foreach (PaymentState::cases() as $case) {
+            $expected['subscriptions.pay_'.$case->value] = 'PaymentState::'.$case->name;
+        }
+
+        foreach (LedgerStatus::cases() as $case) {
+            $expected['subscriptions.ledger_'.$case->value] = 'LedgerStatus::'.$case->name;
+        }
+
+        foreach ((new \ReflectionClass(IdempotencyKey::class))->getConstants() as $name => $value) {
+            if (str_starts_with($name, 'CONTEXT_')) {
+                $expected['subscriptions.ctx_'.$value] = "IdempotencyKey::{$name}";
+            }
+        }
+
+        foreach ($expected as $key => $origin) {
+            $this->assertNotSame(
+                $key,
+                __($key),
+                "{$origin} renders as the raw key \"{$key}\" — add it to lang/he and lang/en",
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @return array<string, string>
+     */
+    private function flatten(array $values, string $prefix): array
+    {
+        $flat = [];
+
+        foreach ($values as $key => $value) {
+            $path = $prefix.'.'.$key;
+
+            if (is_array($value)) {
+                $flat += $this->flatten($value, $path);
+            } elseif (is_string($value)) {
+                $flat[$path] = $value;
+            }
+        }
+
+        return $flat;
     }
 }

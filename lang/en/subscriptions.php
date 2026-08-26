@@ -49,6 +49,13 @@ return [
     'ctx_retry' => 'Retry',
     'ctx_manual' => 'Manual',
     'ctx_v1_import' => 'Imported (legacy)',
+    'ctx_card_update' => 'Card update',
+
+    'ledger_pending' => 'Pending',
+    'ledger_succeeded' => 'Succeeded',
+    'ledger_failed' => 'Failed',
+    'ledger_retry_scheduled' => 'Retry scheduled',
+    'ledger_refunded' => 'Refunded',
     'date' => 'Date',
     'transaction' => 'Transaction',
 
