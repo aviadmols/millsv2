@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Middleware\LogApiRequest;
+use App\Http\Middleware\ShopifyEmbeddedAuthenticate;
 use App\Http\Middleware\ValidateApiSecret;
 use App\Http\Middleware\VerifyShopifyWebhook;
 use App\Http\Middleware\VerifyStorefrontToken;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -34,6 +36,22 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Railway terminates TLS at the edge and forwards HTTP + X-Forwarded-Proto.
         $middleware->trustProxies(at: '*');
+
+        /*
+         * The Shopify SSO must run BEFORE Filament's Authenticate, or it signs the staff
+         * member in one request too late and they meet the login form anyway. Laravel
+         * runs middleware in PRIORITY order, not array order, so listing it in the panel's
+         * middleware array is not enough — position there is ignored.
+         *
+         * The anchor is the INTERFACE, not the class: Laravel's priority list names
+         * `AuthenticatesRequests`, and anchoring on Authenticate::class silently matches
+         * nothing, which lands this at the end of the list — after the very middleware it
+         * has to precede.
+         */
+        $middleware->prependToPriorityList(
+            before: AuthenticatesRequests::class,
+            prepend: ShopifyEmbeddedAuthenticate::class,
+        );
 
         // The Hosted Fields form runs inside an iframe on the storefront, where Safari
         // blocks third-party cookies — so the CSRF session cookie may simply not exist.

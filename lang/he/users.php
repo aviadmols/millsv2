@@ -14,4 +14,8 @@ return [
 
     'action_create' => 'הוספת משתמש',
     'delete_confirm' => 'המשתמש לא יוכל יותר להתחבר. הפעולה אינה הפיכה.',
+
+    // A staff member who entered through the Shopify admin — the account was created
+    // automatically on their first visit, and the number is their Shopify user id.
+    'shopify_staff' => 'צוות שופיפיי #:id',
 ];

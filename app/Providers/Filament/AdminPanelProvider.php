@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Widgets\MillsStats;
 use App\Http\Middleware\ShopifyEmbedded;
+use App\Http\Middleware\ShopifyEmbeddedAuthenticate;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -96,6 +97,9 @@ class AdminPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+                // After StartSession (it signs the staff member in) and before
+                // Authenticate, which is what it exists to satisfy.
+                ShopifyEmbeddedAuthenticate::class,
             ])
             ->authMiddleware([
                 Authenticate::class,

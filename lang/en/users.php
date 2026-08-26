@@ -14,4 +14,8 @@ return [
 
     'action_create' => 'Add a user',
     'delete_confirm' => 'This person will no longer be able to log in. It cannot be undone.',
+
+    // A staff member who entered through the Shopify admin — provisioned on their
+    // first visit; the number is their Shopify user id.
+    'shopify_staff' => 'Shopify staff #:id',
 ];
