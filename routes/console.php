@@ -41,6 +41,20 @@ Schedule::command('mills:reconcile-card-updates')
     ->withoutOverlapping()
     ->onOneServer();
 
+/*
+ * Sweep stored orders/paid webhooks for subscription signups the live handler missed.
+ *
+ * The webhook path already does this in real time; the sweep is the net under it. It has
+ * caught a real fall once: the worker ran a pre-ingestion build for six days (no deploy
+ * trigger), every checkout in that window was logged "unhandled", and a paying customer
+ * had no subscription until this ran. ingest() keys on the order id, so re-reading the
+ * same events forever creates nothing twice.
+ */
+Schedule::command('mills:ingest-subscription-orders --days=7')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Log retention — delete system_logs / cron_runs older than
 // config('mills.logging.retention_days') (default 60 days).
 Schedule::command('logs:prune')
