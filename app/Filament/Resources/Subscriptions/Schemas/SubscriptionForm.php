@@ -10,26 +10,32 @@ use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use Filament\Actions\Action as FormAction;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 
 /**
  * The full subscription editor — owner, plan, order links, and each dog's PRODUCTS.
  *
- * The product picker is dog-aware: the options are the variants the recommender says
- * this dog may actually eat (a 3 kg dog is never offered a 500 g portion), ordered by
- * fit, with the recommended one marked ★ and the dog's computed requirement shown.
- * An admin who needs to override can flip "show the whole catalog" — the filter helps,
- * it never blocks.
+ * The picker offers the WHOLE catalogue. An admin choosing products by hand knows things
+ * the engine does not, and a list that hides the product they came for is an obstacle
+ * rather than help. The one thing that does filter it is an allergy: a food the dog
+ * reacts to is not a preference the engine may be overruled on.
+ *
+ * The engine's opinion is a button beside the picker — "suggest products that fit" opens
+ * what it would choose, split into 30-day and 15-day packs, and adds whatever is ticked
+ * to the selection. An opinion offered is not the same thing as an option withheld.
  */
 class SubscriptionForm
 {
@@ -148,41 +154,16 @@ class SubscriptionForm
                                     ->helperText(fn (Get $get) => self::requirementHint($get))
                                     ->multiple()
                                     ->searchable()
+                                    // The whole shop, not just the subscription flavours: an
+                                    // admin adding a product by hand may be adding anything.
+                                    // 500, because Filament shows only the first 50 by
+                                    // default and a catalogue that stops mid-list reads as a
+                                    // catalogue that does not carry the rest.
+                                    ->optionsLimit(500)
                                     ->options(fn (Get $get) => self::allVariantOptions(self::dogFromForm($get)))
-                                    ->suffixAction(
-                                        FormAction::make('suggestVariants')
-                                            ->label(__('subscriptions.suggest_products'))
-                                            ->tooltip(__('subscriptions.suggest_products_help'))
-                                            ->icon(Heroicon::OutlinedSparkles)
-                                            ->action(function (Get $get, Set $set): void {
-                                                $suggested = array_keys(self::variantOptions($get));
-
-                                                if ($suggested === []) {
-                                                    Notification::make()
-                                                        ->title(__('subscriptions.suggest_none'))
-                                                        ->warning()
-                                                        ->send();
-
-                                                    return;
-                                                }
-
-                                                // ADDED to what is there, never replacing it:
-                                                // the admin's own choices are not the engine's
-                                                // to overwrite.
-                                                $current = (array) ($get('selected_variants') ?? []);
-                                                $merged = array_values(array_unique([...$current, ...$suggested]));
-
-                                                $set('selected_variants', $merged);
-
-                                                Notification::make()
-                                                    ->title(__('subscriptions.suggest_added', [
-                                                        'count' => count($merged) - count($current),
-                                                    ]))
-                                                    ->success()
-                                                    ->send();
-                                            })
-                                    )
                                     ->columnSpanFull(),
+
+                                Actions::make([self::suggestVariantsAction()])->columnSpanFull(),
 
                                 Select::make('addons_products')
                                     ->label(__('subscriptions.addons'))
@@ -195,6 +176,110 @@ class SubscriptionForm
                             ]),
                     ]),
             ]);
+    }
+
+    /**
+     * "Show me what fits" — the engine's opinion, on request, in a list you choose from.
+     *
+     * Not a filter on the picker: an admin choosing by hand knows things the engine does
+     * not, and a catalogue that hides the product they came for is an obstacle. Not a
+     * one-press "add everything" either — that was the first attempt, and an icon that
+     * silently changed the selection told nobody what it had decided.
+     *
+     * Split by pack size because that is the real question in front of the person: 30 a
+     * month of one flavour, or 15 each of two. The same grams/day appears in both lists.
+     */
+    private static function suggestVariantsAction(): FormAction
+    {
+        return FormAction::make('suggestVariants')
+            ->label(__('subscriptions.suggest_products'))
+            ->icon(Heroicon::OutlinedSparkles)
+            ->color('gray')
+            ->modalHeading(__('subscriptions.suggest_products'))
+            ->modalDescription(fn (Get $get) => self::requirementHint($get))
+            ->modalSubmitActionLabel(__('subscriptions.suggest_add'))
+            ->modalWidth(Width::TwoExtraLarge)
+            ->visible(fn (Get $get) => self::suggestionsFor($get) !== [])
+            ->schema(function (Get $get): array {
+                $groups = self::suggestionsFor($get);
+
+                return [
+                    CheckboxList::make('pack_30')
+                        ->label(__('subscriptions.pack_30'))
+                        ->options($groups[30] ?? [])
+                        ->columns(1)
+                        ->visible(($groups[30] ?? []) !== []),
+
+                    CheckboxList::make('pack_15')
+                        ->label(__('subscriptions.pack_15'))
+                        ->options($groups[15] ?? [])
+                        ->columns(1)
+                        ->visible(($groups[15] ?? []) !== []),
+                ];
+            })
+            ->action(function (array $data, Get $get, Set $set): void {
+                $picked = [
+                    ...(array) ($data['pack_30'] ?? []),
+                    ...(array) ($data['pack_15'] ?? []),
+                ];
+
+                if ($picked === []) {
+                    return;
+                }
+
+                // ADDED to what is already there, never replacing it: the admin's own
+                // choices are not the engine's to overwrite.
+                $current = (array) ($get('selected_variants') ?? []);
+                $merged = array_values(array_unique([...$current, ...$picked]));
+
+                $set('selected_variants', $merged);
+
+                Notification::make()
+                    ->title(__('subscriptions.suggest_added', ['count' => count($merged) - count($current)]))
+                    ->success()
+                    ->send();
+            });
+    }
+
+    /**
+     * The engine's picks for this dog, grouped by pack size: [30 => [id => label], 15 => …].
+     *
+     * Empty when the dog has too little information to score — the button hides itself
+     * rather than opening onto nothing.
+     *
+     * @return array<int, array<string, string>>
+     */
+    private static function suggestionsFor(Get $get): array
+    {
+        $dog = self::dogFromForm($get);
+        $recommender = app(DogFoodRecommender::class);
+
+        if (! $recommender->canRecommend($dog)) {
+            return [];
+        }
+
+        $groups = [];
+
+        foreach ($recommender->recommend($dog)['products'] as $entry) {
+            foreach ([$entry['variant'], $entry['variant2']] as $index => $variant) {
+                if ($variant === null) {
+                    continue;
+                }
+
+                $label = VariantResolver::label($variant);
+
+                // The engine's own first choice, marked — the rest are alternatives that
+                // also fit, and an admin scanning two lists deserves to know which is which.
+                if ($index === 0) {
+                    $label = '★ '.$label.' — '.__('subscriptions.recommended');
+                }
+
+                $packSize = (int) ($variant->pack_size ?? 0);
+                $groups[$packSize === 15 ? 15 : 30][(string) $variant->shopify_variant_id] = $label;
+            }
+        }
+
+        return $groups;
     }
 
     /** What the engine says this dog needs, shown right above the picker. */
@@ -213,51 +298,6 @@ class SubscriptionForm
         return $best === null
             ? __('subscriptions.calories_only', ['calories' => $result['calories']])
             : __('subscriptions.requirement', ['grams' => $best['benchmark'], 'calories' => $result['calories']]);
-    }
-
-    /**
-     * What the engine would pick for this dog — the SUGGESTION behind the ✨ button.
-     *
-     * No longer what the picker offers: the picker shows the whole catalogue, because an
-     * admin choosing by hand knows things the engine does not. This is an opinion on
-     * request, which is a different thing from a filter.
-     *
-     * Empty when the dog has too little information to score — the button then says so
-     * rather than adding nothing and looking broken.
-     *
-     * @return array<string, string>
-     */
-    private static function variantOptions(Get $get): array
-    {
-        $dog = self::dogFromForm($get);
-        $recommender = app(DogFoodRecommender::class);
-
-        if (! $recommender->canRecommend($dog)) {
-            return [];
-        }
-
-        $result = $recommender->recommend($dog);
-        $options = [];
-
-        foreach ($result['products'] as $entry) {
-            foreach ([$entry['variant'], $entry['variant2']] as $index => $variant) {
-                if ($variant === null) {
-                    continue;
-                }
-
-                $label = VariantResolver::label($variant);
-                if ($index === 0) {
-                    $label = '★ '.$label.' — '.__('subscriptions.recommended');
-                }
-
-                $options[(string) $variant->shopify_variant_id] = $label;
-            }
-        }
-
-        // The suggestion is what the ENGINE picked — not what is already selected. Folding
-        // the current choice in here would make the button add back what is already there
-        // and report a number that means nothing.
-        return $options;
     }
 
     /**
