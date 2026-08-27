@@ -290,6 +290,26 @@ class DogFoodRecommender
         return $buyable ? [$first, $second] : null;
     }
 
+    /**
+     * Does this product carry something the dog reacts to?
+     *
+     * Public because a sensitivity is not the same KIND of rule as the size and age
+     * filters. Those shape a recommendation and a human may overrule them — an admin
+     * adding a treat by hand is making a choice. An allergy is not a preference: a food
+     * the dog reacts to must not be offered ANYWHERE, including the lists that are
+     * deliberately unfiltered otherwise (add-ons, the whole-catalog view).
+     */
+    public function isAllergenicFor(Product $product, Dog $dog): bool
+    {
+        foreach ($this->allergyList($dog) as $allergy) {
+            if ($this->hasClass($product, $allergy)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** Matches the theme's hasTClass: the product TYPE or any tag, whitespace-normalised. */
     private function hasClass(Product $product, string $class): bool
     {

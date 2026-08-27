@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Domain\Billing\Contracts\PaymentGateway;
+use App\Http\Middleware\ShopifyEmbedded;
 use App\Models\AppSetting;
 use App\Models\CronRun;
 use App\Models\Dog;
@@ -13,6 +14,7 @@ use App\Modules\MillsSubscriptions\Services\Sms\Sms019Sender;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
 use App\Observers\DogObserver;
 use BezhanSalleh\LanguageSwitch\LanguageSwitch;
+use Filament\Facades\Filament;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Support\Facades\Event;
@@ -52,6 +54,35 @@ class AppServiceProvider extends ServiceProvider
         LanguageSwitch::configureUsing(function (LanguageSwitch $switch): void {
             $switch->locales(['he', 'en'])
                 ->labels(['he' => 'עברית', 'en' => 'English']);
+        });
+
+        /*
+         * Shopify's `locale` never decides this panel's language.
+         *
+         * Shopify appends the staff member's SHOPIFY-admin language to every embedded
+         * load, and the switcher above prefers a `locale` query param over everything —
+         * so opening this Hebrew-first system from an English Shopify admin rendered
+         * every screen in English, with the Hebrew translations sitting right there.
+         *
+         * It has to be re-asserted HERE, not in a middleware: the switcher's middleware
+         * carries no priority, so middleware sorting can place it after ours. Filament's
+         * serving hook fires once the whole stack has run, which makes it the one place
+         * guaranteed to get the last word.
+         *
+         * A language the person deliberately chose in the topbar lives in the session and
+         * still wins. Only Shopify's guess about them is discarded.
+         */
+        Filament::serving(function (): void {
+            $request = request();
+            $configured = (string) $request->attributes->get(ShopifyEmbedded::CONFIGURED_LOCALE, '');
+
+            if ($configured === '') {
+                return;   // not an embedded load — nothing to override
+            }
+
+            $chosen = (string) ($request->hasSession() ? $request->session()->get('locale', '') : '');
+
+            app()->setLocale($chosen !== '' ? $chosen : $configured);
         });
 
         // CRON audit log — record every scheduled task run (the v1 blind spot).

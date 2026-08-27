@@ -146,8 +146,9 @@ class SubscriptionForm
                                     ->label(__('subscriptions.addons'))
                                     ->multiple()
                                     ->searchable()
-                                    // Add-ons are a free customer choice — never weight-filtered.
-                                    ->options(fn () => self::allVariantOptions())
+                                    // A free customer choice — never weight-filtered. Allergies
+                                    // are the exception: those are safety, not preference.
+                                    ->options(fn (Get $get) => self::allVariantOptions(self::dogFromForm($get)))
                                     ->columnSpanFull(),
                             ]),
                     ]),
@@ -182,15 +183,18 @@ class SubscriptionForm
      */
     private static function variantOptions(Get $get): array
     {
+        $dog = self::dogFromForm($get);
+
+        // "Show the whole catalog" lifts the SIZE rules — an admin overruling the engine.
+        // It never lifts an allergy: nothing this dog reacts to is offered either way.
         if ($get('show_all_products')) {
-            return self::allVariantOptions();
+            return self::allVariantOptions($dog);
         }
 
-        $dog = self::dogFromForm($get);
         $recommender = app(DogFoodRecommender::class);
 
         if (! $recommender->canRecommend($dog)) {
-            return self::allVariantOptions();
+            return self::allVariantOptions($dog);
         }
 
         $result = $recommender->recommend($dog);
@@ -225,13 +229,28 @@ class SubscriptionForm
     }
 
     /** @return array<string, string> */
-    private static function allVariantOptions(): array
+    /**
+     * Every variant in the catalogue — minus anything this dog reacts to.
+     *
+     * The weight and age rules are deliberately absent here: an admin adding a treat by
+     * hand, or ticking "show the whole catalog", is making a choice the engine should not
+     * argue with. An allergy is not that kind of rule. A food the dog reacts to has no
+     * business being offered on any list, so it is filtered out even here.
+     *
+     * @return array<string, string>
+     */
+    private static function allVariantOptions(?Dog $dog = null): array
     {
+        $recommender = app(DogFoodRecommender::class);
+
         return ProductVariant::query()
             ->with('product')
             ->orderBy('product_id')
             ->orderBy('position')
             ->get()
+            ->reject(fn (ProductVariant $v) => $dog !== null
+                && $v->product !== null
+                && $recommender->isAllergenicFor($v->product, $dog))
             ->mapWithKeys(fn (ProductVariant $v) => [(string) $v->shopify_variant_id => VariantResolver::label($v)])
             ->all();
     }

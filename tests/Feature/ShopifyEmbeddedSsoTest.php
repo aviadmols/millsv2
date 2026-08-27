@@ -226,6 +226,34 @@ class ShopifyEmbeddedSsoTest extends TestCase
         $this->assertFalse(Auth::check());
     }
 
+    public function test_shopifys_locale_does_not_turn_the_hebrew_admin_english(): void
+    {
+        /*
+         * Shopify appends the staff member's SHOPIFY-admin language to every embedded
+         * load, and the language-switch package prefers a `locale` query param over
+         * everything else — so opening this Hebrew-first system from an English Shopify
+         * admin rendered every screen in English, with the Hebrew translations sitting
+         * right there unused.
+         */
+        config()->set('app.locale', 'he');
+
+        $this->get('/admin?id_token='.$this->token().'&embedded=1&locale=en')->assertSuccessful();
+
+        $this->assertSame('he', app()->getLocale());
+    }
+
+    public function test_the_language_switcher_still_works_outside_the_embed(): void
+    {
+        // Only Shopify's copy is ignored. Someone deliberately choosing English on their
+        // own screen must still get it — the switcher is a real feature of this panel.
+        config()->set('app.locale', 'he');
+
+        $this->actingAs(User::factory()->create());
+        $this->get('/admin?locale=en')->assertSuccessful();
+
+        $this->assertSame('en', app()->getLocale());
+    }
+
     public function test_the_ordinary_login_still_works_when_no_token_is_present(): void
     {
         // Nobody embedded: the panel must behave exactly as it did before SSO existed.

@@ -28,17 +28,63 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class ShopifyEmbedded
 {
-    /** The params Shopify uses to identify the embed session. */
-    private const EMBED_PARAMS = ['host', 'shop', 'embedded', 'id_token', 'locale'];
+    /**
+     * The params Shopify uses to identify the embed session.
+     *
+     * `locale` is deliberately NOT here. Shopify appends the staff member's Shopify-admin
+     * language, the language-switch package prefers a `locale` query param over
+     * config('app.locale'), and carrying it through every redirect made it permanent —
+     * so opening the app from an English Shopify admin rendered this Hebrew-first system
+     * in English. App Bridge does not need it; the panel's language is ours to decide.
+     */
+    private const EMBED_PARAMS = ['host', 'shop', 'embedded', 'id_token'];
+
+    /** Request attribute carrying the configured language past the language switcher. */
+    public const CONFIGURED_LOCALE = 'mills.configured_locale';
 
     public function handle(Request $request, Closure $next): Response
     {
+        $this->ignoreShopifyLocale($request);
+
         $response = $next($request);
 
         $this->allowFraming($response);
         $this->preserveEmbedContext($request, $response);
 
         return $response;
+    }
+
+    /**
+     * Drop the `locale` Shopify appends to an embedded load.
+     *
+     * It carries the staff member's SHOPIFY-admin language, and the language-switch
+     * package prefers a `locale` query param over everything else — so opening this
+     * Hebrew-first system from an English Shopify admin rendered every screen in
+     * English, including forms whose Hebrew translations were sitting right there.
+     *
+     * Only on an embedded request, and only Shopify's copy: the topbar switcher sends
+     * the same parameter on its own (non-embedded) redirect and must keep working.
+     */
+    private function ignoreShopifyLocale(Request $request): void
+    {
+        $isEmbedded = $request->query->has('embedded') || $request->query->has('host');
+
+        if (! $isEmbedded) {
+            return;
+        }
+
+        $request->query->remove('locale');
+
+        /*
+         * Hand the CONFIGURED language forward, before anything can move it.
+         *
+         * app()->setLocale() writes config('app.locale') — so once the language switcher
+         * has run, the config no longer says what the system was configured to speak, it
+         * says what that request decided. This middleware runs first, so this is the last
+         * moment the original value can be read; ShopifyEmbeddedAuthenticate restores it
+         * after the switcher, where it gets the final word.
+         */
+        $request->attributes->set(self::CONFIGURED_LOCALE, (string) config('app.locale'));
     }
 
     private function allowFraming(Response $response): void

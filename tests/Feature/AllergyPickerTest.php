@@ -183,4 +183,49 @@ class AllergyPickerTest extends TestCase
         $this->assertSame(1, $left->count());
         $this->assertSame('Fish', $left->first()->title);
     }
+
+    // --- an allergy is not a preference ---------------------------------------
+
+    public function test_a_food_the_dog_reacts_to_is_allergenic_whatever_list_it_is_on(): void
+    {
+        /*
+         * The size and age rules shape a RECOMMENDATION and an admin may overrule them —
+         * ticking "show the whole catalog", or adding a treat by hand, is a person making
+         * a choice. An allergy is not that kind of rule, so the lists that are otherwise
+         * deliberately unfiltered ask this before offering anything.
+         */
+        $chicken = $this->food('Chicken', ['עוף']);
+        $fish = $this->food('Fish', ['דגים']);
+
+        $dog = $this->dog(['allergies' => 'עוף']);
+
+        $this->assertTrue($this->recommender->isAllergenicFor($chicken, $dog));
+        $this->assertFalse($this->recommender->isAllergenicFor($fish, $dog));
+    }
+
+    public function test_a_dog_with_no_sensitivities_reacts_to_nothing(): void
+    {
+        $chicken = $this->food('Chicken', ['עוף']);
+
+        $this->assertFalse($this->recommender->isAllergenicFor($chicken, $this->dog()));
+    }
+
+    public function test_the_check_reads_the_live_form_array_as_well_as_the_stored_string(): void
+    {
+        // Same list, two shapes: the picker hands back an array before anything is saved.
+        $chicken = $this->food('Chicken', ['עוף']);
+
+        $this->assertTrue($this->recommender->isAllergenicFor(
+            $chicken,
+            new Dog(['allergies' => ['עוף']]),
+        ));
+    }
+
+    public function test_a_sensitivity_matches_the_product_type_too_not_only_its_tags(): void
+    {
+        // The catalog carries the flavour on either — the theme's own hasTClass reads both.
+        $chicken = $this->food('Chicken', [], 100, 'עוף');
+
+        $this->assertTrue($this->recommender->isAllergenicFor($chicken, $this->dog(['allergies' => 'עוף'])));
+    }
 }
