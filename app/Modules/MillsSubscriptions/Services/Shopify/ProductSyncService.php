@@ -36,7 +36,7 @@ class ProductSyncService
       featuredImage { url }
       multiplier: metafield(namespace: "product", key: "multiplier") { value }
       collections(first: 10) { nodes { title } }
-      variants(first: 250) {
+      variants(first: 100) {
         pageInfo { hasNextPage endCursor }
         nodes { id title sku price availableForSale image { url } }
       }
@@ -59,9 +59,27 @@ class ProductSyncService
     }
     GQL;
 
-    private const PAGE_QUERY = 'query($cursor: String) { products(first: 50, after: $cursor) { pageInfo { hasNextPage endCursor } nodes {'
+    /*
+     * 25 products, not 50.
+     *
+     * Shopify prices a query by its nested connections — products × variants — against a
+     * single-query cost ceiling. Asking 50 products for their variants at once put the
+     * full sweep over that line and the whole refresh came back empty, which from the
+     * admin screen looks exactly like the button hanging. Halving the page halves the
+     * cost; the extra round trips are cheap next to a sweep that does not run at all.
+     */
+    private const PAGE_QUERY = 'query($cursor: String) { products(first: 25, after: $cursor) { pageInfo { hasNextPage endCursor } nodes {'
         .self::PRODUCT_FIELDS
         .'} } }';
+
+    /**
+     * A hard stop on the variant cursor loop.
+     *
+     * 100 pages is 10,000 variants on ONE product — far past anything real. A cursor that
+     * stops advancing (an API change, a bad response) would otherwise spin this loop until
+     * the request dies, and this runs inside a sweep of the whole catalogue.
+     */
+    private const MAX_VARIANT_PAGES = 100;
 
     private const ONE_QUERY = 'query($id: ID!) { product(id: $id) {'
         .self::PRODUCT_FIELDS
@@ -166,7 +184,15 @@ class ProductSyncService
         // Beyond the first page: follow the cursor until the product runs out of
         // variants. Without this, everything past the cap simply did not exist here.
         $pageInfo = (array) (data_get($node, 'variants.pageInfo') ?? []);
+        $pages = 0;
+
         while (($pageInfo['hasNextPage'] ?? false) && ($cursor = (string) ($pageInfo['endCursor'] ?? '')) !== '') {
+            if (++$pages > self::MAX_VARIANT_PAGES) {
+                Log::warning('shopify.products.variant_pages_exhausted', ['product_id' => $productId]);
+
+                break;
+            }
+
             $result = $this->client->graphql(self::MORE_VARIANTS_QUERY, [
                 'id' => 'gid://shopify/Product/'.$productId,
                 'cursor' => $cursor,

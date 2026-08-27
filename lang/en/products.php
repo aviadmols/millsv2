@@ -4,6 +4,9 @@ return [
     'sync_from_shopify' => 'Sync from Shopify',
     'sync_confirm' => 'Pull all products and images from the store and refresh the local cache?',
 
+    'sync_queued_title' => 'Sync started',
+    'sync_queued_body' => 'The pull from the store is running in the background and usually takes a minute or two. Refresh the page to see the updated products.',
+
     'synced_title' => 'Sync complete',
     'synced_body' => 'Synced 1 product|Synced :count products',
 

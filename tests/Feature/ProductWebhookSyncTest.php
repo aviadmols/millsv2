@@ -2,15 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\Products\Pages\ListProducts;
+use App\Jobs\ImportShopProductsJob;
 use App\Jobs\ProcessShopifyWebhookJob;
 use App\Models\Product;
 use App\Models\ShopifyConnection;
+use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Modules\MillsSubscriptions\Services\PaidOrderIngestor;
 use App\Modules\MillsSubscriptions\Services\Shopify\ProductSyncService;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopInstaller;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -105,6 +110,23 @@ class ProductWebhookSyncTest extends TestCase
         $this->assertDatabaseHas('product_variants', ['shopify_variant_id' => '66514429215024', 'grams' => 84]);
         $this->assertDatabaseHas('product_variants', ['shopify_variant_id' => '1001']);
         Http::assertSentCount(2);
+    }
+
+    public function test_the_admin_sync_button_queues_the_sweep_instead_of_running_it_in_the_request(): void
+    {
+        /*
+         * A full sweep walks every product and every page of its variants — minutes of
+         * Shopify calls. Running that inside the browser request made the button hang
+         * (27 Aug), with no way to tell a slow sync from a broken one.
+         */
+        Queue::fake();
+        $this->actingAs(User::factory()->create());
+
+        Livewire::test(ListProducts::class)
+            ->mountAction('syncFromShopify')
+            ->callMountedAction();
+
+        Queue::assertPushed(ImportShopProductsJob::class);
     }
 
     public function test_a_product_deleted_before_we_read_it_is_not_an_error(): void
