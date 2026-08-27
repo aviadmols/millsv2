@@ -58,9 +58,35 @@ class CustomerMapper
             return null;
         }
 
-        return Customer::query()->updateOrCreate(
-            ['shopify_customer_id' => $shopifyId],
-            array_merge(self::attributes($payload), $extra),
-        );
+        $attributes = array_merge(self::attributes($payload), $extra);
+
+        $existing = Customer::query()->where('shopify_customer_id', $shopifyId)->first();
+
+        if ($existing === null) {
+            /*
+             * Somebody already here under this EMAIL, with no Shopify id yet, is the same
+             * person — not a new one. Both columns are unique, so creating a second row
+             * does not merely duplicate them: it throws, and the import counts a customer
+             * it should have linked as a failure. Claim the existing row instead.
+             *
+             * PaidOrderIngestor::resolveCustomer already reasons exactly this way about a
+             * checkout; a bulk import over a list of 1,172 addresses meets it far more often.
+             */
+            $email = trim((string) ($attributes['email'] ?? ''));
+
+            if ($email !== '') {
+                $existing = Customer::query()->where('email', $email)->first();
+            }
+        }
+
+        if ($existing !== null) {
+            // The id is the LINK — an email-matched customer without it would be
+            // "found" again as a stranger on every future import.
+            $existing->fill($attributes + ['shopify_customer_id' => $shopifyId])->save();
+
+            return $existing;
+        }
+
+        return Customer::query()->create($attributes + ['shopify_customer_id' => $shopifyId]);
     }
 }

@@ -9,6 +9,7 @@ use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
+use App\Support\ShopifyId;
 use Filament\Actions\Action as FormAction;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
@@ -160,6 +161,16 @@ class SubscriptionForm
                                     // default and a catalogue that stops mid-list reads as a
                                     // catalogue that does not carry the rest.
                                     ->optionsLimit(500)
+                                    /*
+                                     * Imported dogs hold GIDs (gid://shopify/ProductVariant/…)
+                                     * — the storefront contract for legacy records — while
+                                     * the options are keyed numeric. Unmatched, a chosen
+                                     * product rendered as its raw gid instead of its name.
+                                     * Normalised on the way in, numeric on the way out; every
+                                     * consumer (VariantResolver, the storefront routes)
+                                     * accepts both shapes.
+                                     */
+                                    ->formatStateUsing(fn ($state) => self::numericIds($state))
                                     ->options(fn (Get $get) => self::allVariantOptions(self::dogFromForm($get)))
                                     ->columnSpanFull(),
 
@@ -169,8 +180,10 @@ class SubscriptionForm
                                     ->label(__('subscriptions.addons'))
                                     ->multiple()
                                     ->searchable()
+                                    ->optionsLimit(500)
                                     // A free customer choice — never weight-filtered. Allergies
                                     // are the exception: those are safety, not preference.
+                                    ->formatStateUsing(fn ($state) => self::numericIds($state))
                                     ->options(fn (Get $get) => self::allVariantOptions(self::dogFromForm($get)))
                                     ->columnSpanFull(),
                             ]),
@@ -280,6 +293,19 @@ class SubscriptionForm
         }
 
         return $groups;
+    }
+
+    /**
+     * Stored variant references as plain numeric ids, whatever shape they arrived in.
+     *
+     * @return list<string>
+     */
+    private static function numericIds(mixed $state): array
+    {
+        return array_values(array_filter(array_map(
+            static fn ($id): string => ShopifyId::numeric((string) $id),
+            (array) ($state ?? []),
+        ), static fn (string $id): bool => $id !== ''));
     }
 
     /** What the engine says this dog needs, shown right above the picker. */

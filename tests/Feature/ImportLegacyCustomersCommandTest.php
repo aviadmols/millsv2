@@ -155,4 +155,44 @@ class ImportLegacyCustomersCommandTest extends TestCase
         // One address, however many times and in whatever case it was written down.
         Http::assertSentCount(1);
     }
+
+    // --- people who are already here -----------------------------------------
+
+    public function test_an_email_already_here_with_a_subscription_is_left_untouched(): void
+    {
+        // The guard that lets the whole list be re-run: importing on top of an existing
+        // subscription would double everything the person is billed for.
+        $customer = Customer::query()->create(['email' => 'dana@example.com', 'shopify_customer_id' => '900111']);
+        $subscription = new Subscription;
+        $subscription->fill(['customer_id' => $customer->id, 'payment_state' => 'payme', 'frequency_months' => 1, 'next_charge_at' => now()->addDay()]);
+        $subscription->forceFill(['status' => 'active'])->save();
+
+        $this->fakeShopify([['id' => '900111', 'email' => 'dana@example.com', 'note' => self::NOTE]]);
+
+        $this->artisan('mills:import-legacy-customers', ['file' => $this->listFile('dana@example.com')])
+            ->assertExitCode(0);
+
+        $this->assertSame(1, Customer::query()->count());
+        $this->assertSame(1, Subscription::query()->count());
+    }
+
+    public function test_an_email_already_here_without_a_shopify_id_is_linked_not_duplicated(): void
+    {
+        /*
+         * The common case in a 1,172-address list: somebody who once logged into the
+         * personal area exists here by email alone. Both email and shopify id are UNIQUE
+         * columns, so "just insert" does not duplicate them — it blows up, and the row
+         * counts as a failure. The same person must be recognised and linked.
+         */
+        Customer::query()->create(['email' => 'dana@example.com']);
+
+        $this->fakeShopify([['id' => '900111', 'email' => 'dana@example.com', 'note' => self::NOTE]]);
+
+        $this->artisan('mills:import-legacy-customers', ['file' => $this->listFile('dana@example.com')])
+            ->assertExitCode(0);
+
+        $customer = Customer::query()->sole();
+        $this->assertSame('900111', $customer->shopify_customer_id);   // linked, not doubled
+        $this->assertSame(1, Subscription::query()->count());          // and the subscription arrived
+    }
 }
