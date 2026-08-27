@@ -110,6 +110,28 @@ class ProductPickerTest extends TestCase
             ->assertSee(__('subscriptions.suggest_products'), false);
     }
 
+    public function test_an_imported_dogs_gid_variants_read_as_product_names(): void
+    {
+        /*
+         * Imported dogs hold GIDs — the storefront contract for legacy records — and the
+         * picker's badge showed the raw gid where a person expects a product name
+         * (27 Aug, first imported subscription). The selection must read as names
+         * whatever shape the ids arrived in.
+         */
+        $variant = $this->product('צבי, בטטה, תות עץ', ['צבי'], 93, 15);
+
+        $this->actingAs(User::factory()->create());
+        $subscription = $this->subscription();
+        $subscription->dogs->first()->forceFill([
+            'selected_variants' => ['gid://shopify/ProductVariant/'.$variant->shopify_variant_id],
+        ])->save();
+
+        $this->get(SubscriptionResource::getUrl('edit', ['record' => $subscription]))
+            ->assertOk()
+            ->assertSee('צבי, בטטה, תות עץ', false)
+            ->assertDontSee('gid:\/\/shopify\/ProductVariant', false);
+    }
+
     public function test_the_edit_screen_renders_with_no_products_cached_at_all(): void
     {
         // An empty catalogue is what a store looks like before the first sync — the screen

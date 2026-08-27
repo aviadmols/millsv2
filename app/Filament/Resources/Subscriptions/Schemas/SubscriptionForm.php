@@ -172,6 +172,9 @@ class SubscriptionForm
                                      */
                                     ->formatStateUsing(fn ($state) => self::numericIds($state))
                                     ->options(fn (Get $get) => self::allVariantOptions(self::dogFromForm($get)))
+                                    // The chosen products by NAME, always — even one the cache
+                                    // does not hold, which otherwise renders as its bare id.
+                                    ->getOptionLabelsUsing(fn (array $values): array => self::selectedLabels($values))
                                     ->columnSpanFull(),
 
                                 Actions::make([self::suggestVariantsAction()])->columnSpanFull(),
@@ -185,6 +188,9 @@ class SubscriptionForm
                                     // are the exception: those are safety, not preference.
                                     ->formatStateUsing(fn ($state) => self::numericIds($state))
                                     ->options(fn (Get $get) => self::allVariantOptions(self::dogFromForm($get)))
+                                    // The chosen products by NAME, always — even one the cache
+                                    // does not hold, which otherwise renders as its bare id.
+                                    ->getOptionLabelsUsing(fn (array $values): array => self::selectedLabels($values))
                                     ->columnSpanFull(),
                             ]),
                     ]),
@@ -293,6 +299,34 @@ class SubscriptionForm
         }
 
         return $groups;
+    }
+
+    /**
+     * The labels for whatever is currently SELECTED, keyed by value.
+     *
+     * The options list covers the cache; this covers the selection — including a variant
+     * the cache does not hold (deleted from the store, or not yet synced), which must
+     * still read as a product with a warning rather than as a bare number.
+     *
+     * @param  list<string>  $values
+     * @return array<string, string>
+     */
+    private static function selectedLabels(array $values): array
+    {
+        $resolved = VariantResolver::resolve($values)
+            ->keyBy(fn (ProductVariant $variant) => (string) $variant->shopify_variant_id);
+
+        $labels = [];
+
+        foreach (self::numericIds($values) as $id) {
+            $variant = $resolved->get($id);
+
+            $labels[$id] = $variant !== null
+                ? VariantResolver::label($variant)
+                : __('subscriptions.unknown_variant', ['id' => $id]);
+        }
+
+        return $labels;
     }
 
     /**
