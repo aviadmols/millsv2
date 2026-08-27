@@ -43,4 +43,10 @@ return [
     'billing_hour' => 'שעת החיוב היומית (שעון ישראל)',
     'subscription_discount' => 'הנחת מנוי (%)',
     'subscription_discount_help' => 'ההנחה שמקבל מנוי חדש על החיובים החוזרים. חלה על מנויים שייווצרו מעכשיו — מנויים קיימים שומרים את ההנחה שלהם, וניתן לשנות לכל מנוי בנפרד במסך שלו.',
+
+    'activate_paypal_hiding' => 'הסתרת PayPal במנויים',
+    'paypal_hiding_activated' => 'PayPal יוסתר מעכשיו בצ׳קאאוט של עגלה עם מנוי',
+    'paypal_hiding_already_active' => 'ההסתרה כבר פעילה — אין מה לעשות',
+    'paypal_hiding_failed' => 'לא הצלחנו להפעיל את ההסתרה',
+    'paypal_hiding_not_deployed' => 'הפונקציה לא מותקנת בחנות. יש להריץ shopify app deploy, ואם ההרשאות של האפליקציה השתנו — להתקין אותה מחדש דרך "חיבור ל-Shopify".',
 ];

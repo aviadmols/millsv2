@@ -6,7 +6,10 @@ use App\Filament\Widgets\CardcomHandoff;
 use App\Models\ActivityEvent;
 use App\Models\Customer;
 use App\Models\PaymentMethod;
+use App\Models\Subscription;
 use App\Models\User;
+use App\Modules\MillsSubscriptions\Enums\PaymentState;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -24,13 +27,24 @@ class CardcomHandoffTest extends TestCase
 
     private function migratedCustomer(string $email = 'moved@example.com'): Customer
     {
-        $customer = Customer::query()->create([
-            'email' => $email,
-            'phone' => '0521230000',
-            // The queue lists people who came FROM the old system — the imported gid is
-            // what says so. A checkout-born customer with the same card source stays out.
-            'legacy_shopify_gid' => 'gid://shopify/Metaobject/'.random_int(1000, 99999),
+        $customer = Customer::query()->create(['email' => $email, 'phone' => '0521230000']);
+
+        /*
+         * What makes this person a Cardcom customer is the SUBSCRIPTION, not the
+         * customer row: an imported legacy-note subscription is the only thing that
+         * says Cardcom was ever billing them. See CardcomHandoffQueueTest.
+         */
+        $subscription = new Subscription;
+        $subscription->fill([
+            'customer_id' => $customer->id,
+            'payment_state' => PaymentState::NEEDS_CARD_UPDATE->value,
+            'frequency_months' => 1,
+            'next_charge_at' => now()->addDays(20),
         ]);
+        $subscription->forceFill([
+            'status' => SubscriptionStatus::ACTIVE->value,
+            'legacy_shopify_gid' => 'gid://shopify/Customer/'.random_int(1000, 99999).'#legacy-note',
+        ])->save();
 
         PaymentMethod::query()->create([
             'customer_id' => $customer->id,

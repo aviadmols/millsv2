@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use App\Models\MailSetting;
 use App\Models\ShopifyConnection;
 use App\Modules\MillsSubscriptions\Services\PayMe\PaymeClient;
+use App\Modules\MillsSubscriptions\Services\Shopify\PaymentCustomizationInstaller;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -19,6 +20,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 /**
  * The one place to configure everything the system needs to run: SMTP (D12),
@@ -202,6 +204,45 @@ class Settings extends Page implements HasForms
                         Notification::make()->title(__('settings.shopify_invalid'))->danger()->persistent()->send();
                     }
                 }),
+            /*
+             * Switch on the checkout function that hides PayPal for subscription carts.
+             *
+             * It lives here because Shopify offers no other way: deploying a Function only
+             * makes it available, and the admin's Payment customizations screen lists what
+             * exists without any means to create one. An app that ships a function and no
+             * switch has shipped nothing.
+             */
+            Action::make('activatePaypalHiding')
+                ->label(__('settings.activate_paypal_hiding'))
+                ->icon(Heroicon::OutlinedShieldCheck)
+                ->color('gray')
+                ->action(function (): void {
+                    try {
+                        $result = app(PaymentCustomizationInstaller::class)->activate();
+                    } catch (Throwable $e) {
+                        $reason = match ($e->getMessage()) {
+                            'not_connected' => __('settings.shopify_not_connected'),
+                            'function_not_found' => __('settings.paypal_hiding_not_deployed'),
+                            default => $e->getMessage(),
+                        };
+
+                        Notification::make()
+                            ->title(__('settings.paypal_hiding_failed'))
+                            ->body($reason)
+                            ->danger()
+                            ->persistent()
+                            ->send();
+
+                        return;
+                    }
+
+                    Notification::make()
+                        ->title($result['status'] === 'already_active'
+                            ? __('settings.paypal_hiding_already_active')
+                            : __('settings.paypal_hiding_activated'))
+                        ->success()
+                        ->send();
+                }),
             Action::make('testPayme')
                 ->label(__('settings.test_payme'))
                 ->icon(Heroicon::OutlinedCreditCard)
@@ -241,7 +282,7 @@ class Settings extends Page implements HasForms
                             }
                         });
                         Notification::make()->title(__('settings.test_email_sent', ['email' => $to]))->success()->send();
-                    } catch (\Throwable $e) {
+                    } catch (Throwable $e) {
                         Notification::make()->title(__('settings.test_email_failed'))->body($e->getMessage())->danger()->persistent()->send();
                     }
                 }),

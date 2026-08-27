@@ -43,4 +43,10 @@ return [
     'billing_hour' => 'Daily billing hour (Israel time)',
     'subscription_discount' => 'Subscriber discount (%)',
     'subscription_discount_help' => 'The discount a new subscriber gets on recurring charges. Applies to subscriptions created from now on — existing ones keep their deal, and each can be changed on its own screen.',
+
+    'activate_paypal_hiding' => 'Hide PayPal on subscriptions',
+    'paypal_hiding_activated' => 'PayPal will now be hidden at checkout when the cart holds a subscription',
+    'paypal_hiding_already_active' => 'Already active — nothing to do',
+    'paypal_hiding_failed' => 'Could not activate the hiding',
+    'paypal_hiding_not_deployed' => 'The function is not installed on the store. Run shopify app deploy, and if the app\'s scopes changed, reinstall it through "Connect to Shopify".',
 ];

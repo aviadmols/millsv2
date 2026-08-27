@@ -37,13 +37,19 @@ class CardcomHandoff extends Widget
         return Customer::query()
             ->whereNull('cardcom_removed_at')
             /*
-             * Only people who actually CAME from the old system. A customer born from a
-             * storefront checkout was never billed by Cardcom — listing them here sent an
-             * admin hunting through Cardcom's admin for a charge that does not exist.
-             * Legacy origin is the imported gid; the card must be one a person entered in
-             * the update flow ('card_update'), not one recovered from a checkout.
+             * Only people whose SUBSCRIPTION came from the old system.
+             *
+             * The marker has to be on the subscription, not the customer: a customer's
+             * `legacy_shopify_gid` is written by CustomerMapper for anyone imported from
+             * Shopify at all — including someone who merely logged into the personal area
+             * by SMS and never had a legacy subscription in their life. Keying on it put a
+             * checkout-born test customer in this queue twice (26 and 27 Aug).
+             *
+             * A subscription imported from the legacy note carries `{gid}#legacy-note`;
+             * one born at checkout carries an original_order_id and no legacy gid. That
+             * distinction is the whole question "was Cardcom ever billing this person".
              */
-            ->whereNotNull('legacy_shopify_gid')
+            ->whereHas('subscriptions', fn (Builder $q) => $q->whereNotNull('legacy_shopify_gid'))
             ->whereHas('paymentMethods', fn (Builder $q) => $q
                 ->where('source', 'card_update')
                 ->where('is_active', true))

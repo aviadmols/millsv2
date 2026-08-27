@@ -1,5 +1,3 @@
-# api_version: 2026-07
-
 schema {
   query: Input
   mutation: MutationRoot
@@ -3212,6 +3210,7 @@ input HideOperation {
 
   """
   Placement types to hide. If not provided, all placements will be hidden.
+  Hiding specific placements is only available on Shopify Plus stores.
   """
   placements: [PaymentCustomizationPaymentMethodPlacement!]
 }
@@ -4922,14 +4921,12 @@ type PaymentCustomizationPaymentMethod {
 
   """
   Placements supported by this payment method.
-  Only available for API clients installed on a Shopify Plus store.
   """
   placements: [PaymentCustomizationPaymentMethodPlacement!]!
 }
 
 """
 Describes how a payment method can be applied at checkout.
-Only available for API clients installed on a Shopify Plus store.
 """
 enum PaymentCustomizationPaymentMethodPlacement {
   """
@@ -4961,6 +4958,7 @@ input PaymentMethodHideOperation {
 
   """
   Placement types to hide. If not provided, all placements will be hidden.
+  Hiding specific placements is only available on Shopify Plus stores.
   """
   placements: [PaymentCustomizationPaymentMethodPlacement!]
 }

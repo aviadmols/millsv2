@@ -15,7 +15,11 @@ application_url = "https://mills.lets.co.il/admin"
 embedded = true
 
 [access_scopes]
-scopes = "read_products,read_orders,write_orders,read_draft_orders,write_draft_orders,read_customers,write_customers"
+# write_payment_customizations is what lets the app ACTIVATE its own
+# hide-paypal-on-subscriptions function. Shopify offers no way to create a payment
+# customization from the admin UI — the screen there only lists ones that already
+# exist — so without this scope the function ships and stays inert forever.
+scopes = "read_products,read_orders,write_orders,read_draft_orders,write_draft_orders,read_customers,write_customers,write_payment_customizations"
 
 [auth]
 redirect_urls = [

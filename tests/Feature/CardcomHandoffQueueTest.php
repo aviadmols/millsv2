@@ -5,7 +5,10 @@ namespace Tests\Feature;
 use App\Filament\Widgets\CardcomHandoff;
 use App\Models\Customer;
 use App\Models\PaymentMethod;
+use App\Models\Subscription;
 use App\Models\User;
+use App\Modules\MillsSubscriptions\Enums\PaymentState;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\CardUpdateService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -21,12 +24,39 @@ class CardcomHandoffQueueTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** Someone whose SUBSCRIPTION came from the legacy note — Cardcom really billed them. */
     private function legacyCustomer(): Customer
     {
+        $customer = $this->shopifyCustomer();
+
+        $subscription = new Subscription;
+        $subscription->fill([
+            'customer_id' => $customer->id,
+            'payment_state' => PaymentState::NEEDS_CARD_UPDATE->value,
+            'frequency_months' => 1,
+            'next_charge_at' => now()->addDays(20),
+        ]);
+        $subscription->forceFill([
+            'status' => SubscriptionStatus::ACTIVE->value,
+            'legacy_shopify_gid' => 'gid://shopify/Customer/'.random_int(1000, 99999).'#legacy-note',
+        ])->save();
+
+        return $customer;
+    }
+
+    /**
+     * A customer known to Shopify — which is EVERY customer who ever logged in by SMS.
+     *
+     * The legacy gid on the customer says only "we imported them from Shopify", never
+     * "Cardcom billed them"; keying the queue on it is what put a checkout-born test
+     * customer in this list.
+     */
+    private function shopifyCustomer(): Customer
+    {
         return Customer::query()->create([
-            'email' => 'legacy'.uniqid().'@example.com',
+            'email' => 'c'.uniqid().'@example.com',
             'shopify_customer_id' => (string) random_int(1000, 99999),
-            'legacy_shopify_gid' => 'gid://shopify/Metaobject/'.random_int(1000, 99999),
+            'legacy_shopify_gid' => 'gid://shopify/Customer/'.random_int(1000, 99999),
         ]);
     }
 
@@ -49,6 +79,31 @@ class CardcomHandoffQueueTest extends TestCase
         ]);
 
         app(CardUpdateService::class)->storeBuyerKey($customer, 'bk_checkout', '**** 3428', source: 'checkout');
+
+        $this->assertFalse(CardcomHandoff::pendingQuery()->exists());
+    }
+
+    public function test_logging_in_by_sms_does_not_make_someone_a_cardcom_customer(): void
+    {
+        /*
+         * The 27 Aug bug, pinned. An SMS login imports the shopper from Shopify and
+         * stamps a legacy gid on the CUSTOMER — so a checkout-born subscriber who once
+         * opened the personal area looked, to the old rule, exactly like a migrated
+         * iCount customer. Their subscription is what tells the truth.
+         */
+        $customer = $this->shopifyCustomer();       // imported by the SMS login
+
+        $subscription = new Subscription;
+        $subscription->fill([
+            'customer_id' => $customer->id,
+            'payment_state' => PaymentState::NEEDS_CARD_UPDATE->value,
+            'frequency_months' => 1,
+            'next_charge_at' => now()->addDays(20),
+            'original_order_id' => '18927529197872',   // born at checkout, not imported
+        ]);
+        $subscription->forceFill(['status' => SubscriptionStatus::PENDING->value])->save();
+
+        app(CardUpdateService::class)->storeBuyerKey($customer, 'bk_portal', '**** 3428');
 
         $this->assertFalse(CardcomHandoff::pendingQuery()->exists());
     }
