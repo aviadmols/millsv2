@@ -2,14 +2,18 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Support\DashboardMetrics;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Filament\Widgets\TableWidget as BaseWidget;
 
 /**
@@ -21,6 +25,8 @@ use Filament\Widgets\TableWidget as BaseWidget;
  */
 class UpcomingOrders extends BaseWidget
 {
+    use InteractsWithPageFilters;
+
     protected static ?int $sort = 3;
 
     protected int|string|array $columnSpan = 'full';
@@ -33,7 +39,33 @@ class UpcomingOrders extends BaseWidget
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => DashboardMetrics::upcomingQuery(30))
+            /*
+             * Scoped by the HOME TAB's selector: "all subscriptions" lists the orders of
+             * the card-blocked book too. The card wall shows on each such row — the amount
+             * column already flags what will not actually charge as things stand.
+             */
+            ->query(fn () => DashboardMetrics::upcomingQuery(
+                30,
+                ($this->pageFilters['scope'] ?? Dashboard::SCOPE_BILLABLE) === Dashboard::SCOPE_ALL,
+            ))
+            ->filters([
+                /*
+                 * "What ships on the 3rd?" is a packing question, and answering it by
+                 * sorting and squinting at a 30-day list is not an answer. One day, its
+                 * orders, its total in the summary row.
+                 */
+                Filter::make('charge_day')
+                    ->schema([
+                        DatePicker::make('day')->label(__('dashboard.charge_day'))->native(false),
+                    ])
+                    ->query(fn ($query, array $data) => $query->when(
+                        $data['day'] ?? null,
+                        fn ($q, $day) => $q->whereDate('next_charge_at', $day),
+                    ))
+                    ->indicateUsing(fn (array $data) => ($data['day'] ?? null)
+                        ? __('dashboard.charge_day').': '.$data['day']
+                        : null),
+            ])
             ->defaultPaginationPageOption(10)
             ->emptyStateHeading(__('dashboard.no_upcoming'))
             ->emptyStateDescription(__('dashboard.no_upcoming_help'))

@@ -159,9 +159,9 @@ final class DashboardMetrics
     }
 
     /** The subscriptions behind the upcoming figures, soonest first. */
-    public static function upcomingQuery(int $withinDays = 30)
+    public static function upcomingQuery(int $withinDays = 30, bool $includeCardBlocked = false)
     {
-        return self::billableQuery()
+        return self::billableQuery($includeCardBlocked)
             ->with(['customer', 'dogs'])
             ->whereBetween('next_charge_at', [
                 now()->subYear(),                       // include the overdue backlog

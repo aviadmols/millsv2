@@ -248,6 +248,30 @@ class DashboardTest extends TestCase
             ->assertCanSeeTableRecords([$subscription]);
     }
 
+    public function test_the_orders_table_follows_the_scope_and_filters_to_a_single_day(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $billable = $this->subscription(['next_charge_at' => now()->addDays(2), 'next_charge_amount' => 100]);
+        $blocked = $this->subscription([
+            'payment_state' => PaymentState::NEEDS_CARD_UPDATE->value,
+            'next_charge_at' => now()->addDays(5),
+            'next_charge_amount' => 500,
+        ]);
+
+        // Default scope: the blocked order is not "upcoming" — it will not go out.
+        Livewire::test(UpcomingOrders::class, ['pageFilters' => ['scope' => Dashboard::SCOPE_BILLABLE]])
+            ->assertCanSeeTableRecords([$billable])
+            ->assertCanNotSeeTableRecords([$blocked]);
+
+        // The whole book: both — and the day filter answers "what ships on the 5th".
+        Livewire::test(UpcomingOrders::class, ['pageFilters' => ['scope' => Dashboard::SCOPE_ALL]])
+            ->assertCanSeeTableRecords([$billable, $blocked])
+            ->filterTable('charge_day', ['day' => now()->addDays(5)->toDateString()])
+            ->assertCanSeeTableRecords([$blocked])
+            ->assertCanNotSeeTableRecords([$billable]);
+    }
+
     // --- the worker light -----------------------------------------------------
 
     private function failedJob(string $queue): void

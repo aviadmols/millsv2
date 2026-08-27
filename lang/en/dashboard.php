@@ -34,6 +34,7 @@ return [
     // Upcoming orders table
     'upcoming_orders' => 'Upcoming orders',
     'charge_date' => 'Charge date',
+    'charge_day' => 'Orders for a specific day',
     'amount' => 'Amount',
     'amount_missing' => 'Unknown',
     'total' => 'Total',

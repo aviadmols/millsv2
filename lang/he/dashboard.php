@@ -34,6 +34,7 @@ return [
     // Upcoming orders table
     'upcoming_orders' => 'ההזמנות הקרובות',
     'charge_date' => 'תאריך חיוב',
+    'charge_day' => 'הזמנות ליום מסוים',
     'amount' => 'סכום',
     'amount_missing' => 'לא ידוע',
     'total' => 'סה"כ',
