@@ -2,6 +2,7 @@
 
 namespace App\Modules\MillsSubscriptions\Services;
 
+use App\Models\AppSetting;
 use App\Models\Customer;
 use App\Models\Dog;
 use App\Models\Product;
@@ -85,6 +86,10 @@ class PaidOrderIngestor
             'original_order_id' => $orderId,
             'next_charge_at' => $this->orderDate($order)->addMonthsNoOverflow($frequency)->startOfDay(),
             'next_charge_amount' => $amount > 0 ? $amount : null,
+            // The admin-set subscriber discount (Settings → billing) — stamped at signup,
+            // so changing the setting later moves NEW signups without touching anyone's
+            // existing deal. Falls back to the column default (10) when unset.
+            'discount_percent' => (float) AppSetting::get('subscription_discount_percent', '10'),
         ]);
         $subscription->forceFill(['status' => SubscriptionStatus::PENDING->value])->save();
 

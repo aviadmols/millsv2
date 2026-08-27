@@ -74,27 +74,31 @@ class CheckoutCardCapture
         }
 
         try {
+            // Every give-up names its step in system_logs. A silent false here meant a
+            // walled subscription with NOTHING on the admin's screen to say why — the
+            // exact opacity this whole system exists to prevent.
             $paymentId = $this->successfulPaymentId($orderId);
             if ($paymentId === '') {
-                return false;
+                return $this->giveUp($subscription, $orderId, 'Shopify returned no successful transaction with a payment id for this order');
             }
 
             $transaction = $this->payme->getTransaction($paymentId);
             $salePaymeId = (string) (data_get($transaction, 'items.0.sale_payme_id') ?? '');
             if ($salePaymeId === '') {
-                return false;
+                return $this->giveUp($subscription, $orderId, 'PayMe get-transactions returned no sale for payment '.$paymentId);
             }
 
             $buyer = $this->payme->getBuyerKey($salePaymeId);
             $buyerKey = (string) ($buyer['buyer_key'] ?? '');
             if ($buyerKey === '') {
-                return false;
+                return $this->giveUp($subscription, $orderId, 'PayMe get-buyer-key returned no buyer_key for sale '.$salePaymeId);
             }
 
             $this->cards->storeBuyerKey(
                 $customer,
                 $buyerKey,
                 (string) ($buyer['masked_card'] ?? $buyer['card_mask'] ?? $buyer['buyer_card_mask'] ?? ''),
+                source: 'checkout',
             );
             $lifted = $this->cards->liftCardUpdateWall($customer);
 
@@ -138,6 +142,17 @@ class CheckoutCardCapture
 
             return false;
         }
+    }
+
+    /** Record WHY the capture stopped, where the admin will look, and give up this pass. */
+    private function giveUp(Subscription $subscription, string $orderId, string $reason): bool
+    {
+        SystemLog::warning('billing', 'could not capture the card from the checkout payment', [
+            'order_id' => $orderId,
+            'message' => $reason,
+        ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+
+        return false;
     }
 
     /** The PayMe payment id on the order's successful transaction, from Shopify. */

@@ -76,6 +76,7 @@ class Settings extends Page implements HasForms
             'sms_019_sender' => AppSetting::get('sms_019_sender'),
 
             'billing_hour' => (string) AppSetting::get('billing_hour', '9'),
+            'subscription_discount_percent' => (string) AppSetting::get('subscription_discount_percent', '10'),
         ]);
     }
 
@@ -134,6 +135,15 @@ class Settings extends Page implements HasForms
                                 ->mapWithKeys(fn (int $h) => [(string) $h => sprintf('%02d:00', $h)])
                                 ->all())
                             ->required(),
+
+                        TextInput::make('subscription_discount_percent')
+                            ->label(__('settings.subscription_discount'))
+                            ->helperText(__('settings.subscription_discount_help'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(100)
+                            ->suffix('%')
+                            ->required(),
                     ]),
             ]);
     }
@@ -154,7 +164,7 @@ class Settings extends Page implements HasForms
             'from_address' => $d['from_address'] ?? null,
         ])->save();
 
-        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender', 'billing_hour'] as $key) {
+        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender', 'billing_hour', 'subscription_discount_percent'] as $key) {
             AppSetting::put($key, $d[$key] ?? null);
         }
 

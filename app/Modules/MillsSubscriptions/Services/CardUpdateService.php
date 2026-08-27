@@ -426,7 +426,13 @@ class CardUpdateService
         Ledger::transition($ledger, LedgerStatus::SUCCEEDED, ['executed_at' => now()]);
     }
 
-    public function storeBuyerKey(Customer $customer, string $buyerKey, string $maskedCard): void
+    /**
+     * @param  string  $source  where the card came from — 'card_update' (the customer or an
+     *                          admin ran the update flow) or 'checkout' (captured from the
+     *                          order's own payment). The Cardcom hand-off queue reads this:
+     *                          a checkout-born customer was never billed by Cardcom.
+     */
+    public function storeBuyerKey(Customer $customer, string $buyerKey, string $maskedCard, string $source = 'card_update'): void
     {
         // One active card per customer — retire the previous one.
         $customer->paymentMethods()->where('is_active', true)->update(['is_active' => false]);
@@ -437,7 +443,7 @@ class CardUpdateService
             'buyer_key' => $buyerKey,
             'masked_card' => $maskedCard !== '' ? $maskedCard : null,
             'is_active' => true,
-            'source' => 'card_update',
+            'source' => $source,
             'captured_at' => now(),
         ]);
     }

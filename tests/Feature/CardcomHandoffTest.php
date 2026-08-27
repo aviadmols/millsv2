@@ -24,7 +24,13 @@ class CardcomHandoffTest extends TestCase
 
     private function migratedCustomer(string $email = 'moved@example.com'): Customer
     {
-        $customer = Customer::query()->create(['email' => $email, 'phone' => '0521230000']);
+        $customer = Customer::query()->create([
+            'email' => $email,
+            'phone' => '0521230000',
+            // The queue lists people who came FROM the old system — the imported gid is
+            // what says so. A checkout-born customer with the same card source stays out.
+            'legacy_shopify_gid' => 'gid://shopify/Metaobject/'.random_int(1000, 99999),
+        ]);
 
         PaymentMethod::query()->create([
             'customer_id' => $customer->id,

@@ -36,8 +36,14 @@ class CardcomHandoff extends Widget
     {
         return Customer::query()
             ->whereNull('cardcom_removed_at')
-            // "Moved to PayMe" = a card captured through the card-update flow. A customer
-            // imported already-on-PayMe was never billed by Cardcom and has nothing to remove.
+            /*
+             * Only people who actually CAME from the old system. A customer born from a
+             * storefront checkout was never billed by Cardcom — listing them here sent an
+             * admin hunting through Cardcom's admin for a charge that does not exist.
+             * Legacy origin is the imported gid; the card must be one a person entered in
+             * the update flow ('card_update'), not one recovered from a checkout.
+             */
+            ->whereNotNull('legacy_shopify_gid')
             ->whereHas('paymentMethods', fn (Builder $q) => $q
                 ->where('source', 'card_update')
                 ->where('is_active', true))

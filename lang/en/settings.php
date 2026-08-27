@@ -41,4 +41,6 @@ return [
     'billing' => 'Billing',
     'billing_help' => 'When the recurring charges run each day.',
     'billing_hour' => 'Daily billing hour (Israel time)',
+    'subscription_discount' => 'Subscriber discount (%)',
+    'subscription_discount_help' => 'The discount a new subscriber gets on recurring charges. Applies to subscriptions created from now on — existing ones keep their deal, and each can be changed on its own screen.',
 ];
