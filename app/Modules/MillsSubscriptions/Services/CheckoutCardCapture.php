@@ -5,6 +5,7 @@ namespace App\Modules\MillsSubscriptions\Services;
 use App\Models\Subscription;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\PayMe\PaymeClient;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use App\Modules\MillsSubscriptions\Support\Timeline;
@@ -96,6 +97,22 @@ class CheckoutCardCapture
                 (string) ($buyer['masked_card'] ?? $buyer['card_mask'] ?? $buyer['buyer_card_mask'] ?? ''),
             );
             $lifted = $this->cards->liftCardUpdateWall($customer);
+
+            /*
+             * PENDING → ACTIVE, through the guarded machine so it lands on the timeline.
+             *
+             * Lifting the wall alone was not enough: the dispatcher only ever charges
+             * ACTIVE subscriptions, so a paid checkout whose card was captured would have
+             * sat "ממתין" forever — billable in every respect except the one the biller
+             * reads. Everything ACTIVE requires is here: a paid order, a dog with its
+             * flavors, an amount, a date, and now a card.
+             */
+            if ($subscription->currentStatus() === SubscriptionStatus::PENDING) {
+                $subscription->transitionTo(
+                    SubscriptionStatus::ACTIVE,
+                    ['reason' => 'checkout card captured'],
+                );
+            }
 
             SystemLog::info('billing', 'card captured from the checkout payment — wall lifted', [
                 'order_id' => $orderId,

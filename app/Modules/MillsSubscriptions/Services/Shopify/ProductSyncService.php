@@ -36,9 +36,27 @@ class ProductSyncService
       featuredImage { url }
       multiplier: metafield(namespace: "product", key: "multiplier") { value }
       collections(first: 10) { nodes { title } }
-      variants(first: 100) {
+      variants(first: 250) {
+        pageInfo { hasNextPage endCursor }
         nodes { id title sku price availableForSale image { url } }
       }
+    GQL;
+
+    /**
+     * The page beyond a product's first 250 variants. The hidden pricing product
+     * ("מנוי מתחדש") grows a variant per flavor×size×price, so it sails past any
+     * fixed cap — and every variant beyond the cap was invisible to the cache,
+     * which is how a real dog's food rendered as "וריאנט לא מזוהה".
+     */
+    private const MORE_VARIANTS_QUERY = <<<'GQL'
+    query($id: ID!, $cursor: String!) {
+      product(id: $id) {
+        variants(first: 250, after: $cursor) {
+          pageInfo { hasNextPage endCursor }
+          nodes { id title sku price availableForSale image { url } }
+        }
+      }
+    }
     GQL;
 
     private const PAGE_QUERY = 'query($cursor: String) { products(first: 50, after: $cursor) { pageInfo { hasNextPage endCursor } nodes {'
@@ -143,7 +161,35 @@ class ProductSyncService
         );
 
         $position = 0;
-        foreach ($node['variants']['nodes'] ?? [] as $variant) {
+        $this->upsertVariants($product, (array) ($node['variants']['nodes'] ?? []), $node, $position);
+
+        // Beyond the first page: follow the cursor until the product runs out of
+        // variants. Without this, everything past the cap simply did not exist here.
+        $pageInfo = (array) (data_get($node, 'variants.pageInfo') ?? []);
+        while (($pageInfo['hasNextPage'] ?? false) && ($cursor = (string) ($pageInfo['endCursor'] ?? '')) !== '') {
+            $result = $this->client->graphql(self::MORE_VARIANTS_QUERY, [
+                'id' => 'gid://shopify/Product/'.$productId,
+                'cursor' => $cursor,
+            ]);
+
+            $page = (array) (data_get($result, 'data.product.variants') ?? []);
+            if (($page['nodes'] ?? []) === []) {
+                break;
+            }
+
+            $this->upsertVariants($product, (array) $page['nodes'], $node, $position);
+            $pageInfo = (array) ($page['pageInfo'] ?? []);
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $variants
+     * @param  array<string, mixed>  $node  the product node (for the fallback image)
+     */
+    private function upsertVariants(Product $product, array $variants, array $node, int &$position): void
+    {
+        foreach ($variants as $variant) {
+            $variant = (array) $variant;
             $variantId = ShopifyId::numeric((string) ($variant['id'] ?? ''));
             if ($variantId === '') {
                 continue;

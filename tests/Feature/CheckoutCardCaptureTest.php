@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ShopifyConnection;
 use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
+use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\PaidOrderIngestor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -103,8 +104,12 @@ class CheckoutCardCaptureTest extends TestCase
 
         $subscription = app(PaidOrderIngestor::class)->ingest($this->paidOrder());
 
-        // The whole point: no wall, no "עדכן כרטיס" for a customer who just paid.
+        // The whole point: no wall, no "עדכן כרטיס" for a customer who just paid —
+        // and ACTIVE, because the dispatcher only ever charges ACTIVE. A captured
+        // card on a PENDING subscription is billable in every respect except the
+        // one the biller reads.
         $this->assertSame(PaymentState::PAYME, $subscription->fresh()->payment_state);
+        $this->assertSame(SubscriptionStatus::ACTIVE, $subscription->fresh()->status);
 
         $method = Customer::query()->firstOrFail()->activePaymentMethod();
         $this->assertSame(self::BUYER_KEY, $method->buyer_key);
@@ -168,6 +173,8 @@ class CheckoutCardCaptureTest extends TestCase
         $this->assertSame($subscription->id, $again->id);
         $this->assertSame(1, Subscription::query()->count());
         $this->assertSame(PaymentState::PAYME, $subscription->fresh()->payment_state);
+        // Healed all the way: not just unwalled but ACTIVE — ready for the next cycle.
+        $this->assertSame(SubscriptionStatus::ACTIVE, $subscription->fresh()->status);
     }
 
     public function test_a_card_the_customer_chose_later_is_never_overwritten_by_an_old_order(): void

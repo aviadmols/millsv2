@@ -70,6 +70,43 @@ class ProductWebhookSyncTest extends TestCase
         });
     }
 
+    public function test_a_product_with_more_variants_than_one_page_syncs_them_all(): void
+    {
+        /*
+         * The hidden pricing product grows a variant per flavor×size×price and sailed past
+         * the old fixed cap — every variant beyond it was invisible to the cache, which is
+         * how a real dog's food rendered as "וריאנט לא מזוהה" on the subscription screen.
+         */
+        Http::fake([
+            '*/graphql.json' => Http::sequence()
+                ->push(['data' => ['product' => [
+                    'id' => 'gid://shopify/Product/777',
+                    'title' => 'מנוי מתחדש',
+                    'handle' => 'subs-test',
+                    'status' => 'ACTIVE',
+                    'variants' => [
+                        'pageInfo' => ['hasNextPage' => true, 'endCursor' => 'cur-1'],
+                        'nodes' => [
+                            ['id' => 'gid://shopify/ProductVariant/1001', 'title' => 'a', 'sku' => 'SF30 - 79', 'price' => '171.00', 'availableForSale' => true],
+                        ],
+                    ],
+                ]]])
+                ->push(['data' => ['product' => ['variants' => [
+                    'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                    'nodes' => [
+                        ['id' => 'gid://shopify/ProductVariant/66514429215024', 'title' => 'b', 'sku' => 'TB30 - 84', 'price' => '162.00', 'availableForSale' => true],
+                    ],
+                ]]]]),
+        ]);
+
+        $this->assertTrue(app(ProductSyncService::class)->refreshOne('777'));
+
+        // The variant from the SECOND page is in the cache — the one that used to vanish.
+        $this->assertDatabaseHas('product_variants', ['shopify_variant_id' => '66514429215024', 'grams' => 84]);
+        $this->assertDatabaseHas('product_variants', ['shopify_variant_id' => '1001']);
+        Http::assertSentCount(2);
+    }
+
     public function test_a_product_deleted_before_we_read_it_is_not_an_error(): void
     {
         // Shopify answers `product: null` for an id it no longer has. Nothing to cache and
