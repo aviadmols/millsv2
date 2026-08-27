@@ -130,7 +130,6 @@ class Settings extends Page implements HasForms
                     ->schema([
                         Select::make('billing_hour')
                             ->label(__('settings.billing_hour'))
-                            ->helperText(__('settings.billing_hour_help'))
                             ->options(collect(range(0, 23))
                                 ->mapWithKeys(fn (int $h) => [(string) $h => sprintf('%02d:00', $h)])
                                 ->all())
