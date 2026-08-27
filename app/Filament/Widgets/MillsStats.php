@@ -2,7 +2,9 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Pages\Dashboard;
 use App\Modules\MillsSubscriptions\Support\DashboardMetrics;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -14,10 +16,16 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
  */
 class MillsStats extends BaseWidget
 {
+    use InteractsWithPageFilters;
+
     protected static ?int $sort = 1;
 
     protected function getStats(): array
     {
+        // The home tab's one choice: only what can actually be charged (PayMe card on
+        // file), or the whole live book including everyone still waiting on a card.
+        $allScope = ($this->pageFilters['scope'] ?? Dashboard::SCOPE_BILLABLE) === Dashboard::SCOPE_ALL;
+
         $period = 30;
 
         $from = now()->subDays($period);
@@ -46,8 +54,13 @@ class MillsStats extends BaseWidget
                 ->color($this->trendColor($revenueTrend))
                 ->chart(DashboardMetrics::revenueSeries(14)),
 
-            Stat::make(__('dashboard.active_subscribers'), DashboardMetrics::activeSubscriptions())
-                ->description(__('dashboard.paused_count', ['count' => DashboardMetrics::pausedSubscriptions()]))
+            Stat::make(
+                $allScope ? __('dashboard.active_subscribers_all') : __('dashboard.active_subscribers_billable'),
+                $allScope ? DashboardMetrics::activeSubscriptions() : DashboardMetrics::billableSubscriptions(),
+            )
+                ->description($allScope
+                    ? __('dashboard.blocked_card', ['count' => DashboardMetrics::needCardUpdate()])
+                    : __('dashboard.paused_count', ['count' => DashboardMetrics::pausedSubscriptions()]))
                 ->descriptionIcon('heroicon-m-users')
                 ->color('primary'),
 

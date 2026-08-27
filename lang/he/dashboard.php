@@ -24,6 +24,10 @@ return [
     'charges_pending' => ':count חיובים',
     'blocked_card' => ':count חסומים (דרוש כרטיס)',
     'include_blocked' => 'כולל ממתינים לעדכון כרטיס',
+    'scope_billable' => 'ניתנים לחיוב (יש כרטיס PayMe)',
+    'scope_all' => 'כל המנויים הפעילים (כולל ממתינים לכרטיס)',
+    'active_subscribers_billable' => 'מנויים ניתנים לחיוב',
+    'active_subscribers_all' => 'כל המנויים הפעילים',
     'include_blocked_note' => 'מוצג הפוטנציאל: כולל :count מנויים פעילים שממתינים לעדכון כרטיס. הסכומים האלה לא ייגבו עד שהלקוחות יזינו כרטיס.',
     'blocked_amount' => ':count ללא סכום',
 

@@ -72,6 +72,15 @@ final class DashboardMetrics
             ->count();
     }
 
+    /** Active AND chargeable — a card on file. The number the biller actually works with. */
+    public static function billableSubscriptions(): int
+    {
+        return Subscription::query()
+            ->where('status', SubscriptionStatus::ACTIVE->value)
+            ->where('payment_state', PaymentState::PAYME->value)
+            ->count();
+    }
+
     public static function pausedSubscriptions(): int
     {
         return Subscription::query()

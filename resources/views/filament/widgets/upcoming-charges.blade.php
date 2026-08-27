@@ -8,15 +8,8 @@
 --}}
 <x-filament-widgets::widget>
     <x-filament::section :heading="__('dashboard.upcoming_heading')">
-        {{-- afterHeader, not headerEnd: the section component declares only the former,
-             and an undeclared slot is silently dropped — a checkbox nobody can see. --}}
-        <x-slot name="afterHeader">
-            <label class="mills-upcoming__toggle">
-                <x-filament::input.checkbox wire:model.live="includeBlocked" />
-                <span>{{ __('dashboard.include_blocked') }}</span>
-            </label>
-        </x-slot>
-
+        {{-- The scope is the HOME TAB's selector (Dashboard filters form) — one choice
+             governs every widget on the page, so no checkbox of this widget's own. --}}
         @if ($includeBlocked)
             <p class="mills-upcoming__potential-note">
                 {{ __('dashboard.include_blocked_note', ['count' => $blocked]) }}

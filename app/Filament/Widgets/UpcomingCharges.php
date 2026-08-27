@@ -2,7 +2,9 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Pages\Dashboard;
 use App\Modules\MillsSubscriptions\Support\DashboardMetrics;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Filament\Widgets\Widget;
 
 /**
@@ -19,25 +21,35 @@ use Filament\Widgets\Widget;
  */
 class UpcomingCharges extends Widget
 {
+    use InteractsWithPageFilters;
+
     protected static ?int $sort = 2;
 
     protected string $view = 'filament.widgets.upcoming-charges';
 
     protected int|string|array $columnSpan = 'full';
 
-    /** The toggle: include ACTIVE subscriptions still waiting on a card. */
-    public bool $includeBlocked = false;
+    /**
+     * Whether the HOME TAB's scope selector says "the whole book". One selector governs
+     * every widget on the page — a per-widget checkbox made the reader reconcile two
+     * different definitions of the same word on one screen.
+     */
+    public function includeBlocked(): bool
+    {
+        return ($this->pageFilters['scope'] ?? Dashboard::SCOPE_BILLABLE) === Dashboard::SCOPE_ALL;
+    }
 
     /**
      * @return array<string, mixed>
      */
     protected function getViewData(): array
     {
-        $include = $this->includeBlocked;
+        $include = $this->includeBlocked();
 
         $month = DashboardMetrics::upcoming(30, $include);
 
         return [
+            'includeBlocked' => $include,
             'stats' => [
                 [
                     'label' => __('dashboard.overdue'),

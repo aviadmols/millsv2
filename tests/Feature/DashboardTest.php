@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Pages\Dashboard;
 use App\Filament\Widgets\MillsStats;
 use App\Filament\Widgets\SystemHealth;
 use App\Filament\Widgets\UpcomingCharges;
@@ -204,15 +205,37 @@ class DashboardTest extends TestCase
             'next_charge_amount' => 500.00,
         ]);
 
-        Livewire::test(UpcomingCharges::class)
-            // The toggle itself must be VISIBLE — it once sat in a slot the section
-            // component does not declare (headerEnd), which is silently dropped.
-            ->assertSee(__('dashboard.include_blocked'))
+        // Scoped by the HOME TAB's selector: default = billable only.
+        Livewire::test(UpcomingCharges::class, ['pageFilters' => ['scope' => Dashboard::SCOPE_BILLABLE]])
             ->assertSee('₪100.00')
-            ->assertDontSee('₪600.00')
-            ->set('includeBlocked', true)
+            ->assertDontSee('₪600.00');
+
+        // "All subscriptions" — the whole book, loudly labelled as potential.
+        Livewire::test(UpcomingCharges::class, ['pageFilters' => ['scope' => Dashboard::SCOPE_ALL]])
             ->assertSee('₪600.00')
             ->assertSee(__('dashboard.include_blocked_note', ['count' => 1]));
+    }
+
+    public function test_the_home_tab_offers_the_scope_choice_and_the_kpi_follows_it(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $this->subscription();                                                          // billable
+        $this->subscription(['payment_state' => PaymentState::NEEDS_CARD_UPDATE->value]); // waiting on a card
+
+        // The selector is on the page itself.
+        $this->get('/admin')->assertSuccessful()
+            ->assertSee(__('dashboard.scope_billable'))
+            ->assertSee(__('dashboard.scope_all'));
+
+        // Billable: 1. The whole book: 2, with the blocked count named.
+        Livewire::test(MillsStats::class, ['pageFilters' => ['scope' => Dashboard::SCOPE_BILLABLE]])
+            ->assertSee(__('dashboard.active_subscribers_billable'))
+            ->assertSeeHtml('1');
+
+        Livewire::test(MillsStats::class, ['pageFilters' => ['scope' => Dashboard::SCOPE_ALL]])
+            ->assertSee(__('dashboard.active_subscribers_all'))
+            ->assertSee(__('dashboard.blocked_card', ['count' => 1]));
     }
 
     public function test_the_upcoming_orders_table_lists_who_is_about_to_be_charged(): void

@@ -24,6 +24,10 @@ return [
     'charges_pending' => ':count charges',
     'blocked_card' => ':count blocked (card needed)',
     'include_blocked' => 'Include those awaiting a card update',
+    'scope_billable' => 'Billable (PayMe card on file)',
+    'scope_all' => 'All active subscriptions (incl. awaiting a card)',
+    'active_subscribers_billable' => 'Billable subscribers',
+    'active_subscribers_all' => 'All active subscribers',
     'include_blocked_note' => 'Showing potential: includes :count active subscriptions still waiting on a card update. These amounts will not be collected until the customers enter a card.',
     'blocked_amount' => ':count with no amount',
 
