@@ -36,10 +36,24 @@ class CheckoutCardCapture
           status
           kind
           paymentId
+          gateway
         }
       }
     }
     GQL;
+
+    /**
+     * Gateways that can never hand us a token to charge the next cycle with.
+     *
+     * PayPal is the one that matters. Shopify's PayPal checkout leaves the merchant no
+     * reusable billing agreement — the consent is PayPal's with Shopify, not with us —
+     * and blocking it at checkout needs a Shopify Function, which for a custom app needs
+     * Shopify Plus (27 Aug: "Shop must be on a Shopify Plus plan to activate functions
+     * from a custom app"). So these orders WILL keep arriving. The least the system can
+     * do is name the reason, instead of leaving a generic failure for someone to
+     * investigate as though something had broken.
+     */
+    private const TOKENLESS_GATEWAYS = ['paypal', 'amazon_payments', 'gift_card'];
 
     public function __construct(
         private readonly ShopifyAdminClient $shopify,
@@ -77,7 +91,18 @@ class CheckoutCardCapture
             // Every give-up names its step in system_logs. A silent false here meant a
             // walled subscription with NOTHING on the admin's screen to say why — the
             // exact opacity this whole system exists to prevent.
-            $paymentId = $this->successfulPaymentId($orderId);
+            ['payment_id' => $paymentId, 'gateway' => $gateway] = $this->successfulPayment($orderId);
+
+            // Say it once, plainly, and stop asking PayMe about a payment that was never
+            // theirs: this is an ordinary outcome, not a fault to be investigated.
+            if ($this->isTokenless($gateway)) {
+                return $this->giveUp(
+                    $subscription,
+                    $orderId,
+                    "the order was paid with {$gateway}, which leaves no reusable token — the customer has to enter a card for the recurring charges",
+                );
+            }
+
             if ($paymentId === '') {
                 return $this->giveUp($subscription, $orderId, 'Shopify returned no successful transaction with a payment id for this order');
             }
@@ -156,7 +181,16 @@ class CheckoutCardCapture
     }
 
     /** The PayMe payment id on the order's successful transaction, from Shopify. */
-    private function successfulPaymentId(string $orderId): string
+    /**
+     * The order's successful payment: its PayMe id, and the gateway that took the money.
+     *
+     * The gateway is read so a give-up can name itself. Without it every non-PayMe
+     * checkout produced the same "PayMe returned no sale" line, which reads like a PayMe
+     * outage rather than the truth: this order was never PayMe's to begin with.
+     *
+     * @return array{payment_id: string, gateway: string}
+     */
+    private function successfulPayment(string $orderId): array
     {
         $result = $this->shopify->graphql(self::ORDER_TRANSACTIONS_QUERY, [
             'id' => 'gid://shopify/Order/'.$orderId,
@@ -167,14 +201,25 @@ class CheckoutCardCapture
 
             if (strtoupper((string) ($transaction['status'] ?? '')) === 'SUCCESS'
                 && in_array(strtoupper((string) ($transaction['kind'] ?? '')), ['SALE', 'CAPTURE'], true)) {
-                $paymentId = (string) ($transaction['paymentId'] ?? '');
-
-                if ($paymentId !== '') {
-                    return $paymentId;
-                }
+                return [
+                    'payment_id' => (string) ($transaction['paymentId'] ?? ''),
+                    'gateway' => strtolower(trim((string) ($transaction['gateway'] ?? ''))),
+                ];
             }
         }
 
-        return '';
+        return ['payment_id' => '', 'gateway' => ''];
+    }
+
+    /** True when this gateway can never yield a reusable token, whatever we ask it. */
+    private function isTokenless(string $gateway): bool
+    {
+        foreach (self::TOKENLESS_GATEWAYS as $needle) {
+            if ($gateway !== '' && str_contains($gateway, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

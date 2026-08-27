@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\ShopifyConnection;
 use App\Models\Subscription;
+use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\PaidOrderIngestor;
@@ -175,6 +176,35 @@ class CheckoutCardCaptureTest extends TestCase
         $this->assertSame(PaymentState::PAYME, $subscription->fresh()->payment_state);
         // Healed all the way: not just unwalled but ACTIVE — ready for the next cycle.
         $this->assertSame(SubscriptionStatus::ACTIVE, $subscription->fresh()->status);
+    }
+
+    public function test_a_paypal_order_says_so_instead_of_blaming_payme(): void
+    {
+        /*
+         * PayPal leaves no reusable token, and blocking it at checkout needs a Shopify
+         * Function — which for a custom app needs Shopify Plus, which this store is not
+         * on. So these orders keep arriving, and the log has to name the reason rather
+         * than reporting "PayMe returned no sale", which reads like a PayMe outage.
+         */
+        Http::fake([
+            '*/graphql.json' => Http::response(['data' => ['order' => ['transactions' => [
+                ['status' => 'SUCCESS', 'kind' => 'SALE', 'paymentId' => 'pp-123', 'gateway' => 'paypal'],
+            ]]]]),
+        ]);
+
+        $subscription = app(PaidOrderIngestor::class)->ingest($this->paidOrder());
+
+        $this->assertNotNull($subscription);
+        $this->assertSame(PaymentState::NEEDS_CARD_UPDATE, $subscription->fresh()->payment_state);
+
+        $log = SystemLog::query()
+            ->where('message', 'could not capture the card from the checkout payment')
+            ->firstOrFail();
+
+        $this->assertStringContainsString('paypal', $log->context['message'] ?? '');
+
+        // And PayMe was never asked about a payment that was never theirs.
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'payme.test'));
     }
 
     public function test_a_card_the_customer_chose_later_is_never_overwritten_by_an_old_order(): void
