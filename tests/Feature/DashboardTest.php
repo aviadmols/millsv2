@@ -187,6 +187,31 @@ class DashboardTest extends TestCase
             ->assertSee('₪200.00');     // and the overdue backlog, called out separately
     }
 
+    public function test_the_toggle_reveals_the_card_blocked_potential_and_says_it_is_potential(): void
+    {
+        /*
+         * The imported Cardcom book: 558 ACTIVE subscriptions all waiting on a card.
+         * By default their money is excluded — it cannot be collected — but "what would
+         * this book be worth" is a question the dashboard must answer on request, and it
+         * must answer it LABELLED, never silently mixed into the real total.
+         */
+        $this->actingAs(User::factory()->create());
+
+        $this->subscription(['next_charge_at' => now()->addDays(2), 'next_charge_amount' => 100.00]);
+        $this->subscription([
+            'payment_state' => PaymentState::NEEDS_CARD_UPDATE->value,
+            'next_charge_at' => now()->addDays(2),
+            'next_charge_amount' => 500.00,
+        ]);
+
+        Livewire::test(UpcomingCharges::class)
+            ->assertSee('₪100.00')
+            ->assertDontSee('₪600.00')
+            ->set('includeBlocked', true)
+            ->assertSee('₪600.00')
+            ->assertSee(__('dashboard.include_blocked_note', ['count' => 1]));
+    }
+
     public function test_the_upcoming_orders_table_lists_who_is_about_to_be_charged(): void
     {
         $this->actingAs(User::factory()->create());

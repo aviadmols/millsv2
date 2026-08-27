@@ -23,6 +23,8 @@ return [
     'next_30_days' => 'Next 30 days',
     'charges_pending' => ':count charges',
     'blocked_card' => ':count blocked (card needed)',
+    'include_blocked' => 'Include those awaiting a card update',
+    'include_blocked_note' => 'Showing potential: includes :count active subscriptions still waiting on a card update. These amounts will not be collected until the customers enter a card.',
     'blocked_amount' => ':count with no amount',
 
     // Upcoming orders table

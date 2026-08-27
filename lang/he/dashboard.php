@@ -23,6 +23,8 @@ return [
     'next_30_days' => '30 הימים הקרובים',
     'charges_pending' => ':count חיובים',
     'blocked_card' => ':count חסומים (דרוש כרטיס)',
+    'include_blocked' => 'כולל ממתינים לעדכון כרטיס',
+    'include_blocked_note' => 'מוצג הפוטנציאל: כולל :count מנויים פעילים שממתינים לעדכון כרטיס. הסכומים האלה לא ייגבו עד שהלקוחות יזינו כרטיס.',
     'blocked_amount' => ':count ללא סכום',
 
     // Upcoming orders table

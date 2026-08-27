@@ -116,9 +116,9 @@ final class DashboardMetrics
      *
      * @return array{count: int, total: float, unknown_amount: int}
      */
-    public static function upcoming(int $withinDays): array
+    public static function upcoming(int $withinDays, bool $includeCardBlocked = false): array
     {
-        $billable = self::billableQuery()->whereBetween('next_charge_at', [
+        $billable = self::billableQuery($includeCardBlocked)->whereBetween('next_charge_at', [
             now()->startOfDay(),
             now()->addDays($withinDays)->endOfDay(),
         ]);
@@ -139,9 +139,9 @@ final class DashboardMetrics
      *
      * @return array{count: int, total: float}
      */
-    public static function overdue(): array
+    public static function overdue(bool $includeCardBlocked = false): array
     {
-        $overdue = self::billableQuery()->where('next_charge_at', '<', now()->startOfDay());
+        $overdue = self::billableQuery($includeCardBlocked)->where('next_charge_at', '<', now()->startOfDay());
 
         return [
             'count' => (clone $overdue)->count(),
@@ -172,12 +172,25 @@ final class DashboardMetrics
         return round((($current - $previous) / $previous) * 100, 1);
     }
 
-    /** Active + on PayMe = the only subscriptions the dispatcher will ever charge. */
-    private static function billableQuery()
+    /**
+     * Active + on PayMe = the only subscriptions the dispatcher will ever charge.
+     *
+     * $includeCardBlocked widens it to ACTIVE subscriptions still waiting on a card —
+     * money that will NOT go out as things stand, but becomes real the moment the
+     * customer updates. With 558 imported Cardcom customers all in that state, "what
+     * would this book be worth" is a question the dashboard has to be able to answer;
+     * it just may never answer it SILENTLY, which is why the default stays false and
+     * the widget labels the wider number as potential.
+     */
+    private static function billableQuery(bool $includeCardBlocked = false)
     {
         return Subscription::query()
             ->where('status', SubscriptionStatus::ACTIVE->value)
-            ->where('payment_state', PaymentState::PAYME->value)
+            ->when(
+                $includeCardBlocked,
+                fn ($q) => $q->whereIn('payment_state', [PaymentState::PAYME->value, PaymentState::NEEDS_CARD_UPDATE->value]),
+                fn ($q) => $q->where('payment_state', PaymentState::PAYME->value),
+            )
             ->whereNotNull('next_charge_at');
     }
 }
