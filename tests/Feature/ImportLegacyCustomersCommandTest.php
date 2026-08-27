@@ -2,12 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\Customers\Pages\ListCustomers;
+use App\Jobs\ImportLegacyCustomersJob;
 use App\Models\Customer;
 use App\Models\ShopifyConnection;
 use App\Models\Subscription;
+use App\Models\User;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -154,6 +159,28 @@ class ImportLegacyCustomersCommandTest extends TestCase
 
         // One address, however many times and in whatever case it was written down.
         Http::assertSentCount(1);
+    }
+
+    public function test_the_admin_action_dispatches_small_chunks_never_one_giant_job(): void
+    {
+        /*
+         * The failure mode this pins: one job carrying the whole list runs far past the
+         * queue's 90-second release window, gets picked up again mid-run, fights itself,
+         * and is stamped failed on every attempt — which is exactly how the first run of
+         * the 1,172 list died, split in two or not. A chunk must NEVER outlive the window.
+         */
+        Queue::fake();
+        $this->actingAs(User::factory()->create());
+
+        $emails = implode("\n", array_map(fn (int $i) => "person{$i}@example.com", range(1, 30)));
+
+        Livewire::test(ListCustomers::class)
+            ->mountAction('bulkImport')
+            ->setActionData(['emails' => $emails, 'dry_run' => false, 'limit' => 0])
+            ->callMountedAction();
+
+        Queue::assertPushed(ImportLegacyCustomersJob::class, 3);   // 12 + 12 + 6
+        Queue::assertPushed(ImportLegacyCustomersJob::class, fn ($job) => count($job->emails) <= ImportLegacyCustomersJob::CHUNK_SIZE);
     }
 
     // --- people who are already here -----------------------------------------

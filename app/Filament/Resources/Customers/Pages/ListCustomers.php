@@ -118,7 +118,14 @@ class ListCustomers extends ListRecords
                     return;
                 }
 
-                ImportLegacyCustomersJob::dispatch($emails);
+                /*
+                 * Chunked, one job per handful. A single job carrying the whole list can
+                 * never finish — the queue re-releases anything that runs longer than 90
+                 * seconds, so it fought itself and failed on every attempt (27 Aug).
+                 */
+                foreach (array_chunk($emails, ImportLegacyCustomersJob::CHUNK_SIZE) as $chunk) {
+                    ImportLegacyCustomersJob::dispatch($chunk);
+                }
 
                 Notification::make()
                     ->title(__('customers.bulk_import_queued', ['count' => count($emails)]))
