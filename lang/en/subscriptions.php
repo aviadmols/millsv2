@@ -77,6 +77,10 @@ return [
     'no_recommendation' => 'Cannot compute a recommendation (missing weight/age, or out of range)',
     'recommended' => 'recommended',
     'show_all_products' => 'Show the whole catalog (no filtering by this dog)',
+    'suggest_products' => 'Suggest products that fit',
+    'suggest_products_help' => 'Adds the variants the engine recommends for this dog — by weight, age and sensitivities. Whatever is already chosen stays.',
+    'suggest_added' => ':count fitting products added',
+    'suggest_none' => 'Not enough about this dog to recommend — fill in weight and age',
     'picker_help' => 'Options are filtered to what suits this dog, and the recommended one is marked ★. Turn on "show the whole catalog" to override.',
 
     'activity' => 'Activity level',

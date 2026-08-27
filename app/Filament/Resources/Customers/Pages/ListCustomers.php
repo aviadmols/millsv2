@@ -4,6 +4,8 @@ namespace App\Filament\Resources\Customers\Pages;
 
 use App\Filament\Resources\Customers\CustomerResource;
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
+use App\Jobs\ImportLegacyCustomersJob;
+use App\Modules\MillsSubscriptions\Services\LegacyBulkImporter;
 use App\Modules\MillsSubscriptions\Services\LegacyCustomerImporter;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyCustomerService;
@@ -13,7 +15,9 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Utilities\Get;
@@ -30,8 +34,99 @@ class ListCustomers extends ListRecords
         return [
             $this->pushByPhoneAction(),
             $this->importFromShopifyAction(),
+            $this->bulkImportAction(),
             CreateAction::make(),
         ];
+    }
+
+    /**
+     * Bring the whole Cardcom-era list across — paste the emails, press import.
+     *
+     * The one-at-a-time import above is the right tool for one person; it is not a way to
+     * move 1,172. This takes the list as it comes out of a spreadsheet (one address per
+     * line, header row and blanks ignored), CHECKS it first without writing anything, and
+     * then hands the work to the worker — 1,172 emails is 1,172 Shopify lookups, which has
+     * no business happening inside a browser request.
+     *
+     * Everyone imported lands behind the card-update wall, which is the whole point: we
+     * hold no PayMe token for any of them, so nothing may be charged until they enter a
+     * card. Running it twice is free — a customer already here is left alone.
+     */
+    private function bulkImportAction(): Action
+    {
+        return Action::make('bulkImport')
+            ->label(__('customers.action_bulk_import'))
+            ->icon(Heroicon::OutlinedArrowDownTray)
+            ->color('gray')
+            ->modalHeading(__('customers.bulk_import_heading'))
+            ->modalDescription(__('customers.bulk_import_help'))
+            ->modalWidth(Width::TwoExtraLarge)
+            ->modalSubmitActionLabel(__('customers.bulk_import_submit'))
+            ->schema([
+                Textarea::make('emails')
+                    ->label(__('customers.bulk_import_field'))
+                    ->rows(12)
+                    ->required()
+                    ->live(debounce: 800)
+                    ->helperText(fn (Get $get) => __('customers.bulk_import_counted', [
+                        'count' => count(LegacyBulkImporter::emailsIn((string) $get('emails'))),
+                    ])),
+
+                Toggle::make('dry_run')
+                    ->label(__('customers.bulk_import_dry_run'))
+                    ->helperText(__('customers.bulk_import_dry_run_help'))
+                    ->default(true),
+
+                TextInput::make('limit')
+                    ->label(__('customers.bulk_import_limit'))
+                    ->helperText(__('customers.bulk_import_limit_help'))
+                    ->numeric()
+                    ->minValue(0)
+                    ->default(3),
+            ])
+            ->action(function (array $data): void {
+                $emails = LegacyBulkImporter::emailsIn((string) ($data['emails'] ?? ''));
+                $limit = max(0, (int) ($data['limit'] ?? 0));
+
+                if ($limit > 0) {
+                    $emails = array_slice($emails, 0, $limit);
+                }
+
+                if ($emails === []) {
+                    Notification::make()->title(__('customers.bulk_import_none'))->warning()->send();
+
+                    return;
+                }
+
+                /*
+                 * A dry run answers "is this list real" — how many of these people Shopify
+                 * actually knows — and it answers NOW, on screen, because a check you have
+                 * to go and look up somewhere else is a check nobody runs.
+                 */
+                if ($data['dry_run'] ?? true) {
+                    $tally = app(LegacyBulkImporter::class)->run($emails, dryRun: true);
+
+                    Notification::make()
+                        ->title(__('customers.bulk_import_dry_result', [
+                            'found' => $tally['imported'],
+                            'missing' => $tally['not_in_shopify'],
+                        ]))
+                        ->success()
+                        ->persistent()
+                        ->send();
+
+                    return;
+                }
+
+                ImportLegacyCustomersJob::dispatch($emails);
+
+                Notification::make()
+                    ->title(__('customers.bulk_import_queued', ['count' => count($emails)]))
+                    ->body(__('customers.bulk_import_queued_help'))
+                    ->success()
+                    ->persistent()
+                    ->send();
+            });
     }
 
     /**

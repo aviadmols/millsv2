@@ -9,14 +9,18 @@ use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
+use Filament\Actions\Action as FormAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 
 /**
  * The full subscription editor — owner, plan, order links, and each dog's PRODUCTS.
@@ -127,19 +131,57 @@ class SubscriptionForm
                                     ->live(),
                                 Toggle::make('neutered')->label(__('subscriptions.neutered'))->live(),
 
-                                AllergySelect::make()->columnSpan(2),
+                                AllergySelect::make()->columnSpan(3),
 
-                                Toggle::make('show_all_products')
-                                    ->label(__('subscriptions.show_all_products'))
-                                    ->dehydrated(false)     // a UI switch, not a dog attribute
-                                    ->live(),
-
+                                /*
+                                 * The WHOLE catalogue, always — an admin picking products
+                                 * by hand knows something the engine does not, and a list
+                                 * that hides the product they came for is an obstacle, not
+                                 * help. Allergies still filter it: those are safety.
+                                 *
+                                 * The engine's opinion is offered as an ACTION instead of
+                                 * a restriction — press it and the fitting variants are
+                                 * added to whatever is already chosen.
+                                 */
                                 Select::make('selected_variants')
                                     ->label(__('subscriptions.products'))
                                     ->helperText(fn (Get $get) => self::requirementHint($get))
                                     ->multiple()
                                     ->searchable()
-                                    ->options(fn (Get $get) => self::variantOptions($get))
+                                    ->options(fn (Get $get) => self::allVariantOptions(self::dogFromForm($get)))
+                                    ->suffixAction(
+                                        FormAction::make('suggestVariants')
+                                            ->label(__('subscriptions.suggest_products'))
+                                            ->tooltip(__('subscriptions.suggest_products_help'))
+                                            ->icon(Heroicon::OutlinedSparkles)
+                                            ->action(function (Get $get, Set $set): void {
+                                                $suggested = array_keys(self::variantOptions($get));
+
+                                                if ($suggested === []) {
+                                                    Notification::make()
+                                                        ->title(__('subscriptions.suggest_none'))
+                                                        ->warning()
+                                                        ->send();
+
+                                                    return;
+                                                }
+
+                                                // ADDED to what is there, never replacing it:
+                                                // the admin's own choices are not the engine's
+                                                // to overwrite.
+                                                $current = (array) ($get('selected_variants') ?? []);
+                                                $merged = array_values(array_unique([...$current, ...$suggested]));
+
+                                                $set('selected_variants', $merged);
+
+                                                Notification::make()
+                                                    ->title(__('subscriptions.suggest_added', [
+                                                        'count' => count($merged) - count($current),
+                                                    ]))
+                                                    ->success()
+                                                    ->send();
+                                            })
+                                    )
                                     ->columnSpanFull(),
 
                                 Select::make('addons_products')
@@ -174,27 +216,24 @@ class SubscriptionForm
     }
 
     /**
-     * The variants this dog may actually eat — recommended first, ★-marked.
+     * What the engine would pick for this dog — the SUGGESTION behind the ✨ button.
      *
-     * Whatever is already selected is always kept in the options; otherwise editing a
-     * dog whose current product no longer passes the filter would silently blank it.
+     * No longer what the picker offers: the picker shows the whole catalogue, because an
+     * admin choosing by hand knows things the engine does not. This is an opinion on
+     * request, which is a different thing from a filter.
+     *
+     * Empty when the dog has too little information to score — the button then says so
+     * rather than adding nothing and looking broken.
      *
      * @return array<string, string>
      */
     private static function variantOptions(Get $get): array
     {
         $dog = self::dogFromForm($get);
-
-        // "Show the whole catalog" lifts the SIZE rules — an admin overruling the engine.
-        // It never lifts an allergy: nothing this dog reacts to is offered either way.
-        if ($get('show_all_products')) {
-            return self::allVariantOptions($dog);
-        }
-
         $recommender = app(DogFoodRecommender::class);
 
         if (! $recommender->canRecommend($dog)) {
-            return self::allVariantOptions($dog);
+            return [];
         }
 
         $result = $recommender->recommend($dog);
@@ -215,20 +254,12 @@ class SubscriptionForm
             }
         }
 
-        return $options + self::currentSelection($get);
+        // The suggestion is what the ENGINE picked — not what is already selected. Folding
+        // the current choice in here would make the button add back what is already there
+        // and report a number that means nothing.
+        return $options;
     }
 
-    /** Keep the already-chosen variants selectable even if they fall outside the filter. */
-    private static function currentSelection(Get $get): array
-    {
-        $selected = VariantResolver::resolve($get('selected_variants'));
-
-        return $selected
-            ->mapWithKeys(fn (ProductVariant $v) => [(string) $v->shopify_variant_id => VariantResolver::label($v)])
-            ->all();
-    }
-
-    /** @return array<string, string> */
     /**
      * Every variant in the catalogue — minus anything this dog reacts to.
      *
