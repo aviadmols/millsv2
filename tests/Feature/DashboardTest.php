@@ -205,6 +205,9 @@ class DashboardTest extends TestCase
         ]);
 
         Livewire::test(UpcomingCharges::class)
+            // The toggle itself must be VISIBLE — it once sat in a slot the section
+            // component does not declare (headerEnd), which is silently dropped.
+            ->assertSee(__('dashboard.include_blocked'))
             ->assertSee('₪100.00')
             ->assertDontSee('₪600.00')
             ->set('includeBlocked', true)

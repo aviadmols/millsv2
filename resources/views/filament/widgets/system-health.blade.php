@@ -20,7 +20,7 @@
         collapsible
         :collapsed="$overall === 'ok'"
     >
-        <x-slot name="headerEnd">
+        <x-slot name="afterHeader">
             <span @class([
                 'mills-health-pill',
                 'mills-health-pill--ok' => $overall === 'ok',

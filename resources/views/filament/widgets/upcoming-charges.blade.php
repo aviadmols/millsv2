@@ -8,7 +8,9 @@
 --}}
 <x-filament-widgets::widget>
     <x-filament::section :heading="__('dashboard.upcoming_heading')">
-        <x-slot name="headerEnd">
+        {{-- afterHeader, not headerEnd: the section component declares only the former,
+             and an undeclared slot is silently dropped — a checkbox nobody can see. --}}
+        <x-slot name="afterHeader">
             <label class="mills-upcoming__toggle">
                 <x-filament::input.checkbox wire:model.live="includeBlocked" />
                 <span>{{ __('dashboard.include_blocked') }}</span>
