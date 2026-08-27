@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\SystemLog;
 use App\Models\User;
 use App\Modules\MillsSubscriptions\Services\Shopify\SessionTokenVerifier;
+use App\Modules\MillsSubscriptions\Services\Shopify\StaffIdentity;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -33,7 +34,10 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class ShopifyEmbeddedAuthenticate
 {
-    public function __construct(private readonly SessionTokenVerifier $verifier) {}
+    public function __construct(
+        private readonly SessionTokenVerifier $verifier,
+        private readonly StaffIdentity $staff,
+    ) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -58,7 +62,7 @@ class ShopifyEmbeddedAuthenticate
             return $next($request);
         }
 
-        $user = $this->userFor((string) ($claims['sub'] ?? ''), $shop);
+        $user = $this->userFor((string) ($claims['sub'] ?? ''), $shop, $jwt);
 
         if ($user === null) {
             return $next($request);
@@ -86,7 +90,7 @@ class ShopifyEmbeddedAuthenticate
      * The password is random and never shared: this account exists to be logged in
      * THROUGH Shopify, and a staff member who leaves the store loses access with it.
      */
-    private function userFor(string $sub, string $shop): ?User
+    private function userFor(string $sub, string $shop, string $sessionToken): ?User
     {
         $sub = trim($sub);
 
@@ -94,25 +98,63 @@ class ShopifyEmbeddedAuthenticate
             return null;
         }
 
-        $email = 'shopify-'.preg_replace('/[^a-zA-Z0-9]/', '', $sub).'@'.$shop;
-        $existing = User::query()->where('email', $email)->first();
+        $fallbackEmail = 'shopify-'.preg_replace('/[^a-zA-Z0-9]/', '', $sub).'@'.$shop;
+        $existing = User::query()->where('email', $fallbackEmail)->first();
+
+        /*
+         * Ask Shopify who this is — but only when it would change something. The exchange
+         * is an HTTP round trip, and this middleware runs on EVERY embedded request; doing
+         * it each time would put Shopify in the path of every page load. Once at creation,
+         * and once more for anyone still wearing the "#77123456" placeholder from before
+         * this existed, is enough.
+         */
+        $identity = ($existing === null || $this->isPlaceholderName($existing->name))
+            ? $this->staff->resolve($sessionToken, $shop)
+            : null;
 
         if ($existing !== null) {
+            if ($identity !== null && $identity['name'] !== '') {
+                $existing->forceFill(['name' => $identity['name']])->save();
+            }
+
             return $existing;
         }
 
+        /*
+         * A staff member whose Shopify email already belongs to a local admin IS that
+         * admin — the person who set the system up and now opens it from inside Shopify.
+         * Claiming the existing account keeps one identity per human, instead of leaving
+         * their notes signed by two different names.
+         */
+        if (($identity['email'] ?? '') !== '') {
+            $byEmail = User::query()->where('email', $identity['email'])->first();
+
+            if ($byEmail !== null) {
+                return $byEmail;
+            }
+        }
+
         $user = User::query()->create([
-            'name' => __('users.shopify_staff', ['id' => $sub]),
-            'email' => $email,
+            'name' => $identity['name'] ?? '' ?: __('users.shopify_staff', ['id' => $sub]),
+            'email' => $identity['email'] ?? '' ?: $fallbackEmail,
             'password' => Str::random(64),
         ]);
 
         SystemLog::info('auth', 'a Shopify staff member opened the app for the first time', [
             'shopify_user_id' => $sub,
             'user_id' => $user->getKey(),
+            'named' => $identity !== null,
         ]);
 
         return $user;
+    }
+
+    /** Still the generated "צוות שופיפיי #123" label, i.e. we never learned their name. */
+    private function isPlaceholderName(?string $name): bool
+    {
+        return $name === null
+            || trim($name) === ''
+            || str_contains((string) $name, '#');
     }
 
     private function extractToken(Request $request): string
