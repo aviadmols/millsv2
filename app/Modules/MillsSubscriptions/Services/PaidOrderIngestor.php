@@ -35,6 +35,8 @@ use Illuminate\Support\Carbon;
  */
 class PaidOrderIngestor
 {
+    public function __construct(private readonly CheckoutCardCapture $checkoutCard) {}
+
     /** Create the subscription a paid order signed up for. Null when it is a plain sale. */
     public function ingest(array $order): ?Subscription
     {
@@ -67,7 +69,12 @@ class PaidOrderIngestor
             ->first();
 
         if ($subscription !== null) {
-            return $subscription;   // webhook redelivery — already ingested
+            // Redelivery or the sweep passing again. Nothing to create — but if the wall
+            // is still up (checkout capture failed last time, or the code shipped after
+            // this order), each pass is another chance to pull the card from the payment.
+            $this->checkoutCard->attempt($subscription);
+
+            return $subscription;
         }
 
         $subscription = new Subscription;
@@ -95,6 +102,11 @@ class PaidOrderIngestor
             'order_name' => (string) ($order['name'] ?? ''),
             'amount' => $amount,
         ], $subscription->id, $customer->id, Timeline::ACTOR_WEBHOOK);
+
+        // The shopper just typed their card into PayMe at this very checkout — pull the
+        // reusable token from that payment instead of asking them to type it again.
+        // Best-effort: on failure the wall stays and the sweep retries in 15 minutes.
+        $this->checkoutCard->attempt($subscription);
 
         return $subscription;
     }
