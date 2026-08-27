@@ -1,0 +1,4 @@
+{
+  "name": "Hide PayPal on subscriptions",
+  "description": "Removes PayPal from checkout whenever the cart contains a subscription, because a PayPal checkout leaves no reusable billing agreement to charge the next cycle with."
+}

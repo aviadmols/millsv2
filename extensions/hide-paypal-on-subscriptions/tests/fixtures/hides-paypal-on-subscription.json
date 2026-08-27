@@ -1,0 +1,22 @@
+{
+  "payload": {
+    "export": "cart-payment-methods-transform-run",
+    "target": "cart.payment-methods.transform.run",
+    "input": {
+      "cart": {
+        "lines": [
+          { "subscriptionFlag": { "value": "true" } }
+        ]
+      },
+      "paymentMethods": [
+        { "id": "gid://shopify/PaymentCustomizationPaymentMethod/1", "name": "Credit card" },
+        { "id": "gid://shopify/PaymentCustomizationPaymentMethod/2", "name": "PayPal" }
+      ]
+    },
+    "output": {
+      "operations": [
+        { "paymentMethodHide": { "paymentMethodId": "gid://shopify/PaymentCustomizationPaymentMethod/2" } }
+      ]
+    }
+  }
+}

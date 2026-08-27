@@ -1,0 +1,18 @@
+# What the function needs to decide, and nothing more.
+#
+# The subscription signal is the theme's own `_subscription` line attribute — the
+# same flag PaidOrderIngestor::subscriptionLines() treats as authoritative on the
+# server, so checkout and ingestion can never disagree about what a subscription is.
+query CartPaymentMethodsTransformRunInput {
+  cart {
+    lines {
+      subscriptionFlag: attribute(key: "_subscription") {
+        value
+      }
+    }
+  }
+  paymentMethods {
+    id
+    name
+  }
+}
