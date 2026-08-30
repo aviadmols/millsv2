@@ -169,11 +169,13 @@ class LegacyCustomerImporter
             ],
         ];
 
-        // A note that carries no usable discount leaves the column default (10%) standing —
-        // it does NOT get written as null, which would bill the customer full price.
-        if ($note['discount_percent'] !== null) {
-            $attributes['discount_percent'] = $note['discount_percent'];
-        }
+        /*
+         * v1's note carries the discount the old system applied (`"discount": 0.9`), and we
+         * deliberately do NOT bring it across: the recurring cycle bills the products at
+         * their store price, with no second discount stacked on top. Reading it is still
+         * worth doing — it lands in the stored note for anyone reconstructing what v1 did —
+         * but it no longer decides what the customer is charged.
+         */
 
         $subscription->fill($attributes);
 

@@ -272,9 +272,12 @@ class DraftOrderService
             ];
         }
 
-        // Subscribers do not pay list price. The real orders bill ₪171.00 of product less
-        // exactly 10% — and v1 posted `discount: 0.9` with every dog. Omitting it would
-        // OVERCHARGE every customer by the discount they have always had.
+        /*
+         * A discount only if one was granted deliberately. v1 stacked 10% on every recurring
+         * order (`discount: 0.9` in the note) on top of the price the products already carry
+         * in the store; since 2026-08-30 the recurring cycle bills the store price, and the
+         * column is zero for everybody unless an admin sets a rate for a specific customer.
+         */
         $discount = (float) ($subscription->discount_percent ?? 0);
 
         if ($discount > 0) {

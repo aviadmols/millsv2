@@ -78,7 +78,7 @@ class Settings extends Page implements HasForms
             'sms_019_sender' => AppSetting::get('sms_019_sender'),
 
             'billing_hour' => (string) AppSetting::get('billing_hour', '9'),
-            'subscription_discount_percent' => (string) AppSetting::get('subscription_discount_percent', '10'),
+            'subscription_discount_percent' => (string) AppSetting::get('subscription_discount_percent', '0'),
         ]);
     }
 

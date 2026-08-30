@@ -42,7 +42,7 @@ return [
     'billing_help' => 'When the recurring charges run each day.',
     'billing_hour' => 'Daily billing hour (Israel time)',
     'subscription_discount' => 'Subscriber discount (%)',
-    'subscription_discount_help' => 'The discount a new subscriber gets on recurring charges. Applies to subscriptions created from now on — existing ones keep their deal, and each can be changed on its own screen.',
+    'subscription_discount_help' => 'The discount a new subscriber gets on recurring charges. 0 = the recurring order is billed at the store price, with no further discount. Applies to subscriptions created from now on — existing ones keep their deal, and each can be changed on its own screen.',
 
     'activate_paypal_hiding' => 'Hide PayPal on subscriptions',
     'paypal_hiding_activated' => 'PayPal will now be hidden at checkout when the cart holds a subscription',

@@ -241,20 +241,32 @@ class SubscriptionScreenTest extends TestCase
 
     // --- the subscriber discount ---------------------------------------------
 
-    public function test_the_upcoming_order_carries_the_subscriber_discount(): void
+    public function test_the_upcoming_order_carries_no_discount_by_default(): void
     {
+        /*
+         * The recurring cycle bills the store's price. v1 stacked 10% on top of it and every
+         * subscription inherited that as a column default, so each upcoming order quietly
+         * gave away a discount nobody had granted.
+         */
         [, $subscription] = $this->scenario();
 
-        // Subscribers have never paid list price: the real orders bill the product less
-        // exactly 10%. A draft built without it would OVERCHARGE every customer.
         $subscription = $subscription->fresh();
-        $this->assertSame('10.00', (string) $subscription->discount_percent, 'the default is the rate the store actually uses');
+        $this->assertSame('0.00', (string) $subscription->discount_percent);
 
-        $input = $this->draftInput($subscription);
+        $this->assertArrayNotHasKey('appliedDiscount', $this->draftInput($subscription));
+    }
 
-        $this->assertArrayHasKey('appliedDiscount', $input);
+    public function test_a_discount_granted_deliberately_is_still_applied(): void
+    {
+        // The mechanism is kept — this is how a specific customer keeps a specific deal.
+        [, $subscription] = $this->scenario();
+
+        $subscription->forceFill(['discount_percent' => 15])->save();
+
+        $input = $this->draftInput($subscription->fresh());
+
         $this->assertSame('PERCENTAGE', $input['appliedDiscount']['valueType']);
-        $this->assertSame(10.0, $input['appliedDiscount']['value']);
+        $this->assertSame(15.0, $input['appliedDiscount']['value']);
     }
 
     public function test_a_zero_discount_subscription_gets_no_discount_line(): void

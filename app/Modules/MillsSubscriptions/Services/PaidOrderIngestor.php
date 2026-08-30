@@ -88,8 +88,10 @@ class PaidOrderIngestor
             'next_charge_amount' => $amount > 0 ? $amount : null,
             // The admin-set subscriber discount (Settings → billing) — stamped at signup,
             // so changing the setting later moves NEW signups without touching anyone's
-            // existing deal. Falls back to the column default (10) when unset.
-            'discount_percent' => (float) AppSetting::get('subscription_discount_percent', '10'),
+            // existing deal. Zero by default: the price the customer paid at checkout is
+            // the price, and a second discount applied on top of it here is money the
+            // store never meant to give away.
+            'discount_percent' => (float) AppSetting::get('subscription_discount_percent', '0'),
         ]);
         $subscription->forceFill(['status' => SubscriptionStatus::PENDING->value])->save();
 

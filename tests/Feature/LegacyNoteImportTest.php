@@ -143,7 +143,9 @@ class LegacyNoteImportTest extends TestCase
         // The wall: this subscription exists, but nothing will charge it.
         $this->assertSame(PaymentState::NEEDS_CARD_UPDATE, $subscription->payment_state);
         $this->assertSame(SubscriptionStatus::ACTIVE, $subscription->status);
-        $this->assertSame(10.0, (float) $subscription->discount_percent);
+        // v1's `discount: 0.9` is read but no longer honoured — the recurring cycle
+        // bills the store price, with no second discount stacked on top of it.
+        $this->assertSame(0.0, (float) $subscription->discount_percent);
 
         $dog = Dog::query()->where('subscription_id', $subscription->id)->firstOrFail();
         $this->assertSame('כלב 1', $dog->name);
