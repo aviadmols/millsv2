@@ -30,6 +30,47 @@ final class StorefrontToken
     /** Clock-skew tolerance for freshly-minted tokens (seconds). */
     private const SKEW = 60;
 
+    /**
+     * Slide the login forward once a token is a day old.
+     *
+     * The token carries its own issue time and nothing else, so the ONLY way a returning
+     * customer stays logged in is to hand them a fresher one. Re-minting on every request
+     * would be wasteful and would churn the stored value constantly; a day is often enough
+     * that anyone visiting within the max age keeps their session indefinitely, while a
+     * token that leaks still dies on the original 30-day clock unless it is used.
+     */
+    public const REFRESH_AFTER = 86400;
+
+    /**
+     * A fresher token for a still-valid one, or null when it is not due for renewal.
+     *
+     * Deliberately re-verifies rather than trusting the caller: this mints credentials, and
+     * a helper that mints from an unverified string is one refactor away from an oracle
+     * that upgrades a forged token into a real one.
+     */
+    public static function renew(string $token, ?int $refreshAfter = null): ?string
+    {
+        // Previews are a support tool with a 30-minute life BY DESIGN — never extend one.
+        if (self::isPreview($token)) {
+            return null;
+        }
+
+        $subject = self::verify($token);
+        if ($subject === null) {
+            return null;
+        }
+
+        if (preg_match(self::SHAPE, trim($token), $m) !== 1) {
+            return null;
+        }
+
+        $age = time() - (int) $m[2];
+
+        return $age >= ($refreshAfter ?? self::REFRESH_AFTER)
+            ? self::mint($subject)
+            : null;
+    }
+
     public static function mint(string $subject, ?int $at = null): string
     {
         $ts = $at ?? time();

@@ -173,7 +173,8 @@ ledger row disappear with no other code change.
 ## 6. Auth
 
 - **Storefront token (frozen v1 format):** `<customer_numeric_id>.<unix_ts>.<hmac_sha256_hex>`
-  HMAC'd with `STOREFRONT_TOKEN_SECRET`; 24h max age; preview variant `pv.*` read-only. v2
+  HMAC'd with `STOREFRONT_TOKEN_SECRET`; 30-day max age, slid forward by the middleware on
+  every visit (`X-Mills-Token`); preview variant `pv.*` read-only and never renewed. v2
   verifies identically; customer resolved from local DB.
 - **OTP (new):** `POST /storefront/auth/otp/request {email}` → hashed 6-digit code, TTL 10 min,
   rate-limit 3/15min/destination; `POST /storefront/auth/otp/verify {email, code}` → mints the

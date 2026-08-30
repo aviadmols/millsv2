@@ -62,5 +62,11 @@ return [
 
     // Storefront personal-area token (frozen v1 format; OTP mints the same shape).
     'storefront_token_secret' => env('STOREFRONT_TOKEN_SECRET'),
-    'storefront_token_max_age' => (int) env('STOREFRONT_TOKEN_MAX_AGE_SECONDS', 86400),
+    /*
+     * How long an SMS login lasts. A day meant a customer who logged in on Monday was
+     * asked for a fresh code on Tuesday — for a shop whose customers visit their account
+     * a few times a year, that is "log in every single time". Thirty days, and the
+     * middleware slides it forward on every visit, so an active customer never re-logs.
+     */
+    'storefront_token_max_age' => (int) env('STOREFRONT_TOKEN_MAX_AGE_SECONDS', 2592000),
 ];

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\VerifyStorefrontToken;
 use App\Models\Customer;
 use App\Models\Dog;
 use App\Models\Subscription;
@@ -205,5 +206,81 @@ class StorefrontContractTest extends TestCase
         $this->getJson('/storefront/me')
             ->assertStatus(401)
             ->assertJsonPath('error', 'unauthenticated');
+    }
+
+    // --- the login stays alive ------------------------------------------------
+
+    public function test_an_aging_login_is_slid_forward_so_a_returning_customer_is_not_asked_to_log_in_again(): void
+    {
+        /*
+         * The token carries its own issue time and nothing else, so without this a customer
+         * is thrown back to the SMS screen exactly one max-age after logging in, however
+         * recently they visited. The header is what makes "valid for 30 days" mean "stays
+         * logged in while you keep coming back".
+         */
+        [$customer] = $this->customerWithSubscription();
+
+        $old = StorefrontToken::mint((string) $customer->shopify_customer_id, time() - (StorefrontToken::REFRESH_AFTER + 60));
+
+        $response = $this->getJson('/storefront/me', ['Authorization' => 'Bearer '.$old])
+            ->assertSuccessful()
+            ->assertHeader(VerifyStorefrontToken::HEADER_RENEWED_TOKEN);
+
+        $fresh = $response->headers->get(VerifyStorefrontToken::HEADER_RENEWED_TOKEN);
+
+        $this->assertNotSame($old, $fresh);
+        $this->assertSame((string) $customer->shopify_customer_id, StorefrontToken::verify($fresh));
+    }
+
+    public function test_a_fresh_login_is_not_reissued_on_every_request(): void
+    {
+        [$customer] = $this->customerWithSubscription();
+
+        $this->getJson('/storefront/me', $this->auth($customer))
+            ->assertSuccessful()
+            ->assertHeaderMissing(VerifyStorefrontToken::HEADER_RENEWED_TOKEN);
+    }
+
+    public function test_an_expired_login_is_refused_rather_than_renewed(): void
+    {
+        // Renewal must never resurrect a dead token — that would make the max age meaningless.
+        [$customer] = $this->customerWithSubscription();
+
+        $dead = StorefrontToken::mint(
+            (string) $customer->shopify_customer_id,
+            time() - ((int) config('shopify.storefront_token_max_age') + 60),
+        );
+
+        $this->getJson('/storefront/me', ['Authorization' => 'Bearer '.$dead])
+            ->assertStatus(401)
+            ->assertHeaderMissing(VerifyStorefrontToken::HEADER_RENEWED_TOKEN);
+    }
+
+    public function test_an_admin_preview_is_never_extended_into_a_lasting_login(): void
+    {
+        /*
+         * A preview is a support tool with a 30-minute life BY DESIGN. Renewing one would
+         * hand staff a permanent key to a customer's account through the back door.
+         */
+        [$customer] = $this->customerWithSubscription();
+
+        $preview = StorefrontToken::mintPreview((string) $customer->shopify_customer_id, time() - 600);
+
+        $this->getJson('/storefront/me', ['Authorization' => 'Bearer '.$preview])
+            ->assertSuccessful()
+            ->assertHeaderMissing(VerifyStorefrontToken::HEADER_RENEWED_TOKEN);
+
+        $this->assertNull(StorefrontToken::renew($preview, 1));
+    }
+
+    public function test_the_login_lasts_a_month(): void
+    {
+        // The whole point of the change: a customer who logged in three weeks ago is still in.
+        [$customer] = $this->customerWithSubscription();
+
+        $threeWeeksOld = StorefrontToken::mint((string) $customer->shopify_customer_id, time() - (21 * 86400));
+
+        $this->getJson('/storefront/me', ['Authorization' => 'Bearer '.$threeWeeksOld])
+            ->assertSuccessful();
     }
 }

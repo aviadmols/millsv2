@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\VerifyStorefrontToken;
+
 /*
  * Which browsers may call this app, and on which routes.
  *
@@ -52,7 +54,14 @@ return [
         'X-Mills-Dev-Customer-Id',
     ],
 
-    'exposed_headers' => [],
+    /*
+     * The theme runs on millsforpets.com and the API answers from another origin, so a
+     * response header the browser is not told to expose is invisible to JavaScript — the
+     * slid-forward login token would be sent and silently dropped.
+     */
+    'exposed_headers' => [
+        VerifyStorefrontToken::HEADER_RENEWED_TOKEN,
+    ],
 
     'max_age' => 3600,           // cache the preflight for an hour
 

@@ -23,6 +23,9 @@ class VerifyStorefrontToken
     // === CONSTANTS ===
     public const REQUEST_ATTR_CUSTOMER = 'customer';
 
+    /** Carries a slid-forward token back to the browser, which stores it in place of the old one. */
+    public const HEADER_RENEWED_TOKEN = 'X-Mills-Token';
+
     public function handle(Request $request, Closure $next): Response
     {
         $secret = (string) config('shopify.storefront_token_secret', '');
@@ -89,7 +92,21 @@ class VerifyStorefrontToken
 
         $request->attributes->set(self::REQUEST_ATTR_CUSTOMER, $customer);
 
-        return $next($request);
+        $response = $next($request);
+
+        /*
+         * Slide the login forward. The token is stateless, so a customer's session ends the
+         * moment their stored token passes the max age — no matter how recently they used
+         * it. Handing back a fresh one on each visit is what turns "valid for 30 days" into
+         * "stays logged in as long as you keep coming back", which is what an account area
+         * is expected to do. The header is only ever ADDED: a client that ignores it keeps
+         * working exactly as before, on its existing token.
+         */
+        if (($renewed = StorefrontToken::renew($token)) !== null) {
+            $response->headers->set(self::HEADER_RENEWED_TOKEN, $renewed);
+        }
+
+        return $response;
     }
 
     private function importFirstTimer(string $shopifyCustomerId): ?Customer
