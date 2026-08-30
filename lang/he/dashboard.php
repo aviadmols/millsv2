@@ -91,8 +91,8 @@ return [
     'health_last_run' => 'ריצה אחרונה',
     'health_no_runs' => 'לא נרשמה אף ריצה — ה-scheduler לא פועל.',
 
-    'cardcom_heading' => 'ממתינים להסרה מ-Cardcom',
-    'cardcom_description' => 'הלקוחות האלה שמרו כרטיס ועברו להיות מחויבים אצלנו — אבל החיוב הישן שלהם ב-Cardcom מוסר רק ידנית, ועד אז הם מחויבים פעמיים. אשר כל אחד רק אחרי שהסרת אותו בפועל ב-Cardcom.',
-    'cardcom_confirm' => 'הוסר מ-Cardcom',
+    'cardcom_heading' => 'ממתינים להסרה מ-iCount',
+    'cardcom_description' => 'הלקוחות האלה שמרו כרטיס ועברו להיות מחויבים אצלנו — אבל החיוב הישן שלהם ב-iCount מוסר רק ידנית, ועד אז הם מחויבים פעמיים. אשר כל אחד רק אחרי שהסרת אותו בפועל ב-iCount.',
+    'cardcom_confirm' => 'הוסר מ-iCount',
     'cardcom_confirmed' => 'נרשם. הלקוח ירד מרשימת החיוב הכפול.',
 ];

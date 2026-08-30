@@ -91,8 +91,8 @@ return [
     'health_last_run' => 'Last run',
     'health_no_runs' => 'No run has ever been recorded — the scheduler is not running.',
 
-    'cardcom_heading' => 'Waiting for Cardcom removal',
-    'cardcom_description' => 'These customers saved a card and are now billed by us — but their old recurring charge in Cardcom must be removed BY HAND, and until it is they are being billed twice. Confirm each one only after removing it in Cardcom.',
-    'cardcom_confirm' => 'Removed from Cardcom',
+    'cardcom_heading' => 'Waiting for iCount removal',
+    'cardcom_description' => 'These customers saved a card and are now billed by us — but their old recurring charge in iCount must be removed BY HAND, and until it is they are being billed twice. Confirm each one only after removing it in iCount.',
+    'cardcom_confirm' => 'Removed from iCount',
     'cardcom_confirmed' => 'Recorded. The customer is off the double-billing list.',
 ];

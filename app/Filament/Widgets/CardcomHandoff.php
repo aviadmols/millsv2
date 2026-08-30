@@ -82,9 +82,9 @@ class CardcomHandoff extends Widget
             'cardcom_removed_by' => auth()->id(),
         ])->save();
 
-        // Named and permanent: "who says the Cardcom charge is gone" must always have an
+        // Named and permanent: "who says the iCount charge is gone" must always have an
         // answer, because the failure this queue exists for is silent double billing.
-        SystemLog::info('admin', 'Cardcom recurring charge confirmed removed', [
+        SystemLog::info('admin', 'iCount recurring charge confirmed removed', [
             'admin_id' => auth()->id(),
         ], ['customer_id' => $customer->id]);
 
