@@ -23,6 +23,7 @@ return [
     'kind_status_changed' => 'Status changed',
     'kind_address_updated' => 'Address updated',
     'kind_dog_updated' => 'Dog updated',
+    'kind_plan_updated' => 'Plan updated',
     'kind_note' => 'Note',
     'kind_admin_note' => 'Staff note',
     'kind_generic' => 'Activity',
@@ -49,6 +50,8 @@ return [
     'model_subscription' => 'Subscription',
     'model_dog' => 'Dog',
     'sum_payment_state' => 'Payment state: :state',
+    'sum_frequency' => 'Frequency: :from → :to',
+    'sum_charge_date' => 'Charge date: :from → :to',
     'sum_address' => 'The delivery address was changed',
 
     'empty_heading' => 'Nothing has happened yet',

@@ -23,6 +23,7 @@ return [
     'kind_status_changed' => 'סטטוס שונה',
     'kind_address_updated' => 'כתובת עודכנה',
     'kind_dog_updated' => 'כלב עודכן',
+    'kind_plan_updated' => 'המנוי עודכן',
     'kind_note' => 'הערה',
     'kind_admin_note' => 'הערה של צוות',
     'kind_generic' => 'פעילות',
@@ -49,6 +50,8 @@ return [
     'model_subscription' => 'מנוי',
     'model_dog' => 'כלב',
     'sum_payment_state' => 'מצב תשלום: :state',
+    'sum_frequency' => 'תדירות: :from ← :to',
+    'sum_charge_date' => 'תאריך חיוב: :from ← :to',
     'sum_address' => 'כתובת המשלוח שונתה',
 
     'empty_heading' => 'עדיין לא קרה כלום',

@@ -43,6 +43,18 @@ final class Timeline
 
     public const KIND_DOG_UPDATED = 'dog_updated';
 
+    /**
+     * The customer changed their own plan from the personal area — the delivery frequency,
+     * the next charge date, or both. details: {frequency_from, frequency_to,
+     * charge_date_from, charge_date_to}, each pair present only if that value moved.
+     *
+     * Recorded with the BEFORE and AFTER values rather than a list of field names. "The
+     * customer touched frequency" is not history; "monthly → every 2 months" is, and it is
+     * the difference between a timeline support can answer questions from and one that just
+     * proves something happened.
+     */
+    public const KIND_PLAN_UPDATED = 'plan_updated';
+
     // === CONSTANTS: actors ===
     public const ACTOR_SYSTEM = 'system';
 

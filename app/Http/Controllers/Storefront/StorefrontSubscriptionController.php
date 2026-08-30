@@ -35,12 +35,49 @@ class StorefrontSubscriptionController extends AbstractStorefrontController
             return $this->fail('no_fields', 'לא נשלחו שדות לעדכון.', 422);
         }
 
+        /*
+         * Cancellation is final (SubscriptionStatus::allowed() gives `cancelled` nowhere to
+         * go), so every edit on a cancelled subscription is a request that cannot succeed.
+         * It used to reach the state machine and come back as "Illegal transition on
+         * Subscription: cancelled → active" — a developer sentence, in English, shown to a
+         * customer who simply wanted their subscription back. Say what is true instead.
+         */
+        if ($subscription->status->isTerminal()) {
+            return $this->fail(
+                'subscription_cancelled',
+                'המנוי הזה בוטל ואי אפשר להפעיל אותו מחדש. אפשר לפתוח מנוי חדש דרך השאלון.',
+                409,
+            );
+        }
+
+        /*
+         * Captured BEFORE the change, because the timeline's job is to answer "what did the
+         * customer do" — and a record of which FIELDS were touched cannot answer that. The
+         * previous version logged `['fields' => [...]]`, an array, which the presenter drops
+         * from a one-line summary: every self-service change showed up as an empty "Note".
+         */
+        $changes = [];
+
         if (array_key_exists('frequency', $data)) {
             // v1 sends a free-text frequency ("Monthly" / "Every 2 Months").
-            $subscription->frequency_months = str_contains(strtolower($data['frequency']), '2') ? 2 : 1;
+            $months = str_contains(strtolower($data['frequency']), '2') ? 2 : 1;
+
+            if ($months !== (int) $subscription->frequency_months) {
+                $changes['frequency_from'] = (int) $subscription->frequency_months;
+                $changes['frequency_to'] = $months;
+            }
+
+            $subscription->frequency_months = $months;
         }
 
         if (array_key_exists('charge_cycle', $data)) {
+            $before = $subscription->next_charge_at?->toDateString();
+
+            if ($before !== $data['charge_cycle']) {
+                $changes['charge_date_from'] = $before;
+                $changes['charge_date_to'] = $data['charge_cycle'];
+            }
+
             $subscription->next_charge_at = $data['charge_cycle'];
         }
 
@@ -53,7 +90,13 @@ class StorefrontSubscriptionController extends AbstractStorefrontController
                 try {
                     $subscription->transitionTo($target);
                 } catch (IllegalTransitionException $e) {
-                    return $this->fail('illegal_transition', $e->getMessage(), 422);
+                    // The exception text names classes and enum values — useful in a log,
+                    // never in front of a customer.
+                    SystemLog::warning('storefront', 'customer attempted an impossible status change', [
+                        'message' => $e->getMessage(),
+                    ], ['subscription_id' => $subscription->id, 'customer_id' => $customer->id]);
+
+                    return $this->fail('illegal_transition', 'לא ניתן לשנות את המנוי למצב הזה.', 422);
                 }
             }
         }
@@ -62,7 +105,15 @@ class StorefrontSubscriptionController extends AbstractStorefrontController
             'fields' => array_keys($data),
         ], ['subscription_id' => $subscription->id, 'customer_id' => $customer->id]);
 
-        Timeline::record(Timeline::KIND_NOTE, ['fields' => array_keys($data)], $subscription->id, $customer->id, Timeline::ACTOR_CUSTOMER);
+        /*
+         * The status change already writes its own `status_changed` event through the state
+         * machine, so recording one here too would show the same thing twice. Nothing left
+         * to say means nothing worth a row: a customer who pressed save without changing
+         * anything should not leave a trace that looks like a change.
+         */
+        if ($changes !== []) {
+            Timeline::record(Timeline::KIND_PLAN_UPDATED, $changes, $subscription->id, $customer->id, Timeline::ACTOR_CUSTOMER);
+        }
 
         return $this->ok(['subscription' => StorefrontPresenter::subscription($subscription->fresh())]);
     }

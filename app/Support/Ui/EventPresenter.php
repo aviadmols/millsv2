@@ -33,6 +33,7 @@ final class EventPresenter
         Timeline::KIND_STATUS_CHANGED => ['info', 'activity.kind_status_changed'],
         Timeline::KIND_ADDRESS_UPDATED => ['info', 'activity.kind_address_updated'],
         Timeline::KIND_DOG_UPDATED => ['info', 'activity.kind_dog_updated'],
+        Timeline::KIND_PLAN_UPDATED => ['info', 'activity.kind_plan_updated'],
         Timeline::KIND_ADMIN_NOTE => ['gray', 'activity.kind_admin_note'],
         Timeline::KIND_NOTE => ['gray', 'activity.kind_note'],
     ];
@@ -48,6 +49,7 @@ final class EventPresenter
         'subscriptions_unblocked', 'recovered_by_reconciliation', 'dog_name', 'weight',
         'source', 'dogs', 'shopify_order_id', 'order', 'payment_state', 'fields',
         'note', 'actor', 'mode',
+        'frequency_from', 'frequency_to', 'charge_date_from', 'charge_date_to',
     ];
 
     public static function tone(ActivityEvent $event): string
@@ -142,8 +144,48 @@ final class EventPresenter
             ]),
             Timeline::KIND_STATUS_CHANGED => self::statusSummary($d),
             Timeline::KIND_ADDRESS_UPDATED => __('activity.sum_address'),
+            Timeline::KIND_PLAN_UPDATED => self::planSummary($d),
             default => self::readableDetails($d),
         };
+    }
+
+    /**
+     * What the customer actually changed about their plan, in words, with both values.
+     *
+     * Both halves can be present in one row — changing the frequency and the date is one
+     * save from the customer's side, and splitting it into two rows would misrepresent it
+     * as two visits.
+     *
+     * @param  array<string, mixed>  $d
+     */
+    private static function planSummary(array $d): string
+    {
+        $parts = [];
+
+        if (isset($d['frequency_to'])) {
+            $parts[] = __('activity.sum_frequency', [
+                'from' => self::frequencyLabel($d['frequency_from'] ?? null),
+                'to' => self::frequencyLabel($d['frequency_to']),
+            ]);
+        }
+
+        if (isset($d['charge_date_to'])) {
+            $parts[] = __('activity.sum_charge_date', [
+                'from' => (string) ($d['charge_date_from'] ?? '—'),
+                'to' => (string) $d['charge_date_to'],
+            ]);
+        }
+
+        return $parts === [] ? self::readableDetails($d) : implode(' · ', $parts);
+    }
+
+    private static function frequencyLabel(mixed $months): string
+    {
+        if ($months === null) {
+            return '—';
+        }
+
+        return (int) $months === 2 ? __('subscriptions.every_2_months') : __('subscriptions.monthly');
     }
 
     /**
@@ -199,9 +241,26 @@ final class EventPresenter
 
         $parts = [];
         foreach ($d as $key => $value) {
-            if (is_array($value) || is_object($value)) {
+            if (is_object($value)) {
                 continue;   // nested payloads belong in the detail view, not a one-liner
             }
+
+            /*
+             * A flat list of scalars reads perfectly well on one line, and dropping it did
+             * real damage: the customer self-service events recorded `['fields' => [...]]`
+             * and nothing else, so every one of them rendered as a completely blank row —
+             * a history that proves something happened and refuses to say what.
+             */
+            if (is_array($value)) {
+                $flat = array_filter($value, fn ($v) => is_scalar($v));
+
+                if ($flat === [] || count($flat) !== count($value)) {
+                    continue;
+                }
+
+                $value = implode(', ', array_map(fn ($v) => str_replace('_', ' ', (string) $v), $flat));
+            }
+
             $parts[] = str_replace('_', ' ', (string) $key).': '
                 .(is_bool($value) ? ($value ? 'yes' : 'no') : (string) $value);
         }
