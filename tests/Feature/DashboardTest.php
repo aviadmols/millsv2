@@ -238,6 +238,38 @@ class DashboardTest extends TestCase
             ->assertSee(__('dashboard.blocked_card', ['count' => 1]));
     }
 
+    public function test_the_period_selector_answers_how_many_signed_up_today(): void
+    {
+        /*
+         * "Today" must mean today — from midnight — not a rolling 24 hours. Answering with
+         * "since this time yesterday" is a different question that produces a similar
+         * enough number to be believed.
+         */
+        $this->actingAs(User::factory()->create());
+
+        $today = $this->subscription();
+        $today->forceFill(['created_at' => now()->startOfDay()->addHour()])->save();
+
+        $yesterdayEvening = $this->subscription();
+        $yesterdayEvening->forceFill(['created_at' => now()->subDay()->endOfDay()->subHour()])->save();
+
+        Livewire::test(MillsStats::class, ['pageFilters' => ['period' => 1]])
+            ->assertSee(__('dashboard.new_subscribers', ['window' => __('dashboard.period_day')]));
+
+        $this->assertSame(1, DashboardMetrics::newSubscriptions(now()->startOfDay(), now()));
+        $this->assertSame(2, DashboardMetrics::newSubscriptions(now()->subDay()->startOfDay(), now()));
+    }
+
+    public function test_an_unknown_period_falls_back_rather_than_becoming_the_window(): void
+    {
+        // The value arrives from the browser; an arbitrary number here would silently
+        // become the window every figure on the page is measured over.
+        $this->actingAs(User::factory()->create());
+
+        Livewire::test(MillsStats::class, ['pageFilters' => ['period' => 9999]])
+            ->assertSee(__('dashboard.new_subscribers', ['window' => __('dashboard.period_month')]));
+    }
+
     public function test_the_upcoming_orders_table_lists_who_is_about_to_be_charged(): void
     {
         $this->actingAs(User::factory()->create());

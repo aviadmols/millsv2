@@ -6,12 +6,19 @@ return [
     'charges_30d' => 'Successful charges (30 days)',
 
     // KPI cards
-    'processed_revenue' => 'Processed revenue (30 days)',
+    'period' => 'Period',
+    'period_day' => 'Today',
+    'period_2_days' => '2 days',
+    'period_week' => 'Week',
+    'period_month' => 'Month',
+    'period_quarter' => '3 months',
+
+    'processed_revenue' => 'Processed revenue · :window',
     'charges_count' => ':count charges',
     'active_subscribers' => 'Active subscribers',
     'paused_count' => ':count paused',
-    'new_subscribers' => 'New subscribers (30 days)',
-    'churned_subscribers' => 'Churned (30 days)',
+    'new_subscribers' => 'New subscribers · :window',
+    'churned_subscribers' => 'Churned · :window',
     'failed_charges' => ':count charges failed',
     'vs_previous' => 'vs the previous period',
 

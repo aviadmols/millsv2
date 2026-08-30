@@ -6,12 +6,19 @@ return [
     'charges_30d' => 'חיובים מוצלחים (30 ימים)',
 
     // KPI cards
-    'processed_revenue' => 'הכנסות שנגבו (30 ימים)',
+    'period' => 'טווח זמן',
+    'period_day' => 'היום',
+    'period_2_days' => 'יומיים',
+    'period_week' => 'שבוע',
+    'period_month' => 'חודש',
+    'period_quarter' => '3 חודשים',
+
+    'processed_revenue' => 'הכנסות שנגבו · :window',
     'charges_count' => ':count חיובים',
     'active_subscribers' => 'מנויים פעילים',
     'paused_count' => ':count מושהים',
-    'new_subscribers' => 'מנויים חדשים (30 ימים)',
-    'churned_subscribers' => 'נטישות (30 ימים)',
+    'new_subscribers' => 'מנויים חדשים · :window',
+    'churned_subscribers' => 'נטישות · :window',
     'failed_charges' => ':count חיובים נכשלו',
     'vs_previous' => 'מול התקופה הקודמת',
 

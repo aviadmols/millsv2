@@ -26,12 +26,25 @@ class MillsStats extends BaseWidget
         // file), or the whole live book including everyone still waiting on a card.
         $allScope = ($this->pageFilters['scope'] ?? Dashboard::SCOPE_BILLABLE) === Dashboard::SCOPE_ALL;
 
-        $period = 30;
+        /*
+         * The window every period figure is measured over. A day, two days, a week, a month
+         * or a quarter — and the comparison is always the SAME length immediately before it,
+         * so the trend arrow answers "against the equivalent stretch" rather than against a
+         * fixed month that would make every single day look like a collapse.
+         */
+        $period = $this->periodDays();
 
-        $from = now()->subDays($period);
+        /*
+         * Calendar days, from midnight — not a rolling 24 hours. "How many signed up today"
+         * means today, and answering it with "since this time yesterday" is a different
+         * question that happens to produce a similar-looking number.
+         */
+        $from = now()->subDays($period - 1)->startOfDay();
         $to = now();
-        $prevFrom = now()->subDays($period * 2);
+        $prevFrom = now()->subDays(($period * 2) - 1)->startOfDay();
         $prevTo = $from;
+
+        $window = Dashboard::periods()[$period];
 
         $revenue = DashboardMetrics::revenue($from, $to);
         $revenueTrend = DashboardMetrics::trend($revenue, DashboardMetrics::revenue($prevFrom, $prevTo));
@@ -45,7 +58,7 @@ class MillsStats extends BaseWidget
         $failed = DashboardMetrics::failedCount($from, $to);
 
         return [
-            Stat::make(__('dashboard.processed_revenue'), '₪'.number_format($revenue, 2))
+            Stat::make(__('dashboard.processed_revenue', ['window' => $window]), '₪'.number_format($revenue, 2))
                 ->description($this->trendText(
                     $revenueTrend,
                     __('dashboard.charges_count', ['count' => DashboardMetrics::chargeCount($from, $to)]),
@@ -64,20 +77,34 @@ class MillsStats extends BaseWidget
                 ->descriptionIcon('heroicon-m-users')
                 ->color('primary'),
 
-            Stat::make(__('dashboard.new_subscribers'), $newSubs)
+            Stat::make(__('dashboard.new_subscribers', ['window' => $window]), $newSubs)
                 ->description($this->trendText($newTrend, __('dashboard.vs_previous')))
                 ->descriptionIcon($this->trendIcon($newTrend))
                 ->color($this->trendColor($newTrend)),
 
             // Churn and failed charges are the two numbers that should look ugly when they
             // are ugly — a dashboard that flatters you is worse than none.
-            Stat::make(__('dashboard.churned_subscribers'), $churned)
+            Stat::make(__('dashboard.churned_subscribers', ['window' => $window]), $churned)
                 ->description($failed > 0
                     ? __('dashboard.failed_charges', ['count' => $failed])
                     : $this->trendText($churnTrend, __('dashboard.vs_previous')))
                 ->descriptionIcon($failed > 0 ? 'heroicon-m-exclamation-triangle' : 'heroicon-m-arrow-trending-down')
                 ->color($churned > 0 || $failed > 0 ? 'danger' : 'success'),
         ];
+    }
+
+    /**
+     * The chosen window, in days.
+     *
+     * Validated against the offered list rather than trusted: the filter value arrives from
+     * the browser, and an arbitrary number here would silently become the window every
+     * figure on the page is measured over.
+     */
+    private function periodDays(): int
+    {
+        $period = (int) ($this->pageFilters['period'] ?? Dashboard::DEFAULT_PERIOD_DAYS);
+
+        return isset(Dashboard::periods()[$period]) ? $period : Dashboard::DEFAULT_PERIOD_DAYS;
     }
 
     private function trendText(?float $trend, string $suffix): string
