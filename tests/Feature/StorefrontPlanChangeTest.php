@@ -115,6 +115,46 @@ class StorefrontPlanChangeTest extends TestCase
         $this->assertSame(SubscriptionStatus::CANCELLED, $subscription->fresh()->status);
     }
 
+    public function test_a_status_change_records_who_did_it_and_from_where(): void
+    {
+        /*
+         * transitionTo defaults to the SYSTEM actor with no reason, so a customer pausing
+         * their own subscription read as something the system did for reasons unknown —
+         * on the one screen support opens to find out who did what.
+         */
+        $subscription = $this->subscription();
+
+        $this->patchJson('/storefront/me/subscription/'.$subscription->id, [
+            'subscription_status' => 'pending',
+        ], $this->auth($subscription))->assertSuccessful();
+
+        $event = ActivityEvent::query()->where('kind', Timeline::KIND_STATUS_CHANGED)->latest('id')->firstOrFail();
+
+        $this->assertSame(Timeline::ACTOR_CUSTOMER, $event->actor);
+        $this->assertStringContainsString(__('activity.reason_self_service'), EventPresenter::summarize($event));
+        $this->assertStringContainsString(__('subscriptions.status_pending'), EventPresenter::summarize($event));
+    }
+
+    public function test_an_old_field_list_row_reads_as_words_rather_than_a_key(): void
+    {
+        // These rows are permanent — they cannot be improved at source, only rendered better.
+        $subscription = $this->subscription();
+
+        $event = new ActivityEvent;
+        $event->forceFill([
+            'kind' => Timeline::KIND_NOTE,
+            'actor' => Timeline::ACTOR_CUSTOMER,
+            'subscription_id' => $subscription->id,
+            'customer_id' => $subscription->customer_id,
+            'details' => ['fields' => ['subscription_status']],
+        ])->save();
+
+        $this->assertSame(
+            __('activity.sum_fields_changed', ['fields' => __('activity.field_subscription_status')]),
+            EventPresenter::summarize($event),
+        );
+    }
+
     public function test_a_paused_subscription_can_still_be_restarted(): void
     {
         // The one that MUST keep working: pausing is reversible, and the button that

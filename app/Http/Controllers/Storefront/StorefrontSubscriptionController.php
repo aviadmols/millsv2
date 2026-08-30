@@ -88,7 +88,17 @@ class StorefrontSubscriptionController extends AbstractStorefrontController
 
             if ($target !== $subscription->status) {
                 try {
-                    $subscription->transitionTo($target);
+                    /*
+                     * Named and explained. transitionTo defaults to the SYSTEM actor with no
+                     * reason, so a customer pausing their own subscription was recorded as
+                     * something the system did for reasons unknown — and the one question
+                     * the timeline exists to answer is who did this, and from where.
+                     */
+                    $subscription->transitionTo(
+                        $target,
+                        ['reason' => __('activity.reason_self_service')],
+                        Timeline::ACTOR_CUSTOMER,
+                    );
                 } catch (IllegalTransitionException $e) {
                     // The exception text names classes and enum values — useful in a log,
                     // never in front of a customer.

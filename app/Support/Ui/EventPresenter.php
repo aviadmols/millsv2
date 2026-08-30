@@ -145,8 +145,42 @@ final class EventPresenter
             Timeline::KIND_STATUS_CHANGED => self::statusSummary($d),
             Timeline::KIND_ADDRESS_UPDATED => __('activity.sum_address'),
             Timeline::KIND_PLAN_UPDATED => self::planSummary($d),
+            // Rows written before plan_updated existed: all they carry is the list of field
+            // names. It is not much, but "the customer changed: subscription status" beats
+            // the raw key, and these rows are permanent — they cannot be improved at source.
+            Timeline::KIND_NOTE => self::noteSummary($d),
             default => self::readableDetails($d),
         };
+    }
+
+    /**
+     * The historical self-service rows, made as readable as their contents allow.
+     *
+     * A note the system wrote about itself may carry prose, in which case note() renders it
+     * and the summary stays out of the way. What is left is the old `fields` payload, whose
+     * keys are field names — translated here rather than shown as `subscription_status`.
+     *
+     * @param  array<string, mixed>  $d
+     */
+    private static function noteSummary(array $d): string
+    {
+        if (trim((string) ($d['note'] ?? '')) !== '') {
+            return '';
+        }
+
+        $fields = array_filter((array) ($d['fields'] ?? []), fn ($f) => is_scalar($f));
+
+        if ($fields === []) {
+            return self::readableDetails($d);
+        }
+
+        $labels = array_map(static function ($field): string {
+            $key = 'activity.field_'.$field;
+
+            return __($key) === $key ? str_replace('_', ' ', (string) $field) : __($key);
+        }, $fields);
+
+        return __('activity.sum_fields_changed', ['fields' => implode(', ', $labels)]);
     }
 
     /**
