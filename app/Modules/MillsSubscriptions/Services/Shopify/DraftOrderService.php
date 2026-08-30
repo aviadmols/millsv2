@@ -2,8 +2,10 @@
 
 namespace App\Modules\MillsSubscriptions\Services\Shopify;
 
+use App\Models\DiscountRule;
 use App\Models\Subscription;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Support\DiscountResolver;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use App\Support\ShopifyId;
 use RuntimeException;
@@ -264,7 +266,8 @@ class DraftOrderService
     {
         $subscription->loadMissing('customer');
 
-        $input = ['lineItems' => $this->lineItems($subscription)];
+        $lineItems = $this->lineItems($subscription);
+        $input = ['lineItems' => $lineItems];
 
         if (! empty($subscription->customer?->shopify_customer_id)) {
             $input['purchasingEntity'] = [
@@ -273,23 +276,62 @@ class DraftOrderService
         }
 
         /*
-         * A discount only if one was granted deliberately. v1 stacked 10% on every recurring
-         * order (`discount: 0.9` in the note) on top of the price the products already carry
-         * in the store; since 2026-08-30 the recurring cycle bills the store price, and the
-         * column is zero for everybody unless an admin sets a rate for a specific customer.
+         * A discount only if one was earned. v1 stacked 10% on every recurring order on top
+         * of the price the products already carry in the store; since 2026-08-30 nobody is
+         * discounted by default, and what they get instead is decided by the discount rules
+         * — matched against this exact order — or by a rate an admin set on the subscription
+         * itself, which outranks every rule.
          */
-        $discount = (float) ($subscription->discount_percent ?? 0);
+        $decision = DiscountResolver::for($subscription, $lineItems);
 
-        if ($discount > 0) {
-            $input['appliedDiscount'] = [
-                'valueType' => 'PERCENTAGE',
-                'value' => $discount,
-                'title' => __('subscriptions.discount_title'),
-            ];
+        if ($decision !== null) {
+            $input = $this->applyDiscount($input, $decision);
         }
 
         // No shipping line: subscription delivery is free (D-shipping). The historical
         // ₪29 "משלוח עד הבית" belongs to the old one-off checkout, not the recurring cycle.
+
+        return $input;
+    }
+
+    /**
+     * Put the decided discount on the draft — on the order, or on the lines it applies to.
+     *
+     * Shopify takes a percentage either way; the difference is where it hangs. A line-scoped
+     * rule must NOT also set an order-level discount, or Shopify applies both and the
+     * customer is discounted twice for one rule.
+     *
+     * @param  array<string, mixed>  $input
+     * @param  array{percent: float, scope: string, rule_name: ?string, variant_ids: list<string>}  $decision
+     * @return array<string, mixed>
+     */
+    private function applyDiscount(array $input, array $decision): array
+    {
+        $title = $decision['rule_name'] ?: __('subscriptions.discount_title');
+
+        if ($decision['scope'] !== DiscountRule::SCOPE_MATCHING_LINES) {
+            $input['appliedDiscount'] = [
+                'valueType' => 'PERCENTAGE',
+                'value' => $decision['percent'],
+                'title' => $title,
+            ];
+
+            return $input;
+        }
+
+        $targets = array_flip($decision['variant_ids']);
+
+        foreach ($input['lineItems'] as $i => $line) {
+            if (! isset($targets[ShopifyId::numeric((string) $line['variantId'])])) {
+                continue;
+            }
+
+            $input['lineItems'][$i]['appliedDiscount'] = [
+                'valueType' => 'PERCENTAGE',
+                'value' => $decision['percent'],
+                'title' => $title,
+            ];
+        }
 
         return $input;
     }
