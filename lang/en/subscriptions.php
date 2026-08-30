@@ -176,4 +176,11 @@ return [
     'upcoming_updated' => 'The upcoming order was updated — :total',
     'upcoming_needs_a_line' => 'An order needs at least one product',
     'edited_by_hand' => 'This upcoming order was edited by hand',
+
+    'action_refresh_upcoming' => 'Refresh upcoming orders',
+    'refresh_upcoming_heading' => 'Rebuild every upcoming order',
+    'refresh_upcoming_help' => 'What each customer is charged is the stored total of their upcoming order, and it only updates when something touches that subscription. This rebuilds the upcoming order for :count subscriptions against Shopify — so the amounts follow the store\'s prices and the discount configured now (0%). A customer\'s amount may change. A subscription Shopify cannot price keeps its existing amount.',
+    'refresh_upcoming_submit' => 'Refresh all',
+    'refresh_upcoming_started' => 'Rebuilding :count upcoming orders. The figures update within a few minutes — the system log records every amount that changes.',
+    'refresh_upcoming_none' => 'There are no upcoming orders to rebuild.',
 ];
