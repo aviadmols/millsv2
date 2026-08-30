@@ -140,7 +140,7 @@ return [
 
     'discount_percent' => 'Subscriber discount',
     'discount_title' => 'Subscriber discount',
-    'discount_help' => 'Applied to the upcoming order. The historical orders were billed at 10%.',
+    'discount_help' => 'Applied to the upcoming order. 0 = billed at the store price, with no further discount. Leave it at 0 unless a personal deal was agreed with this customer.',
 
     'edit' => 'Edit',
     'close' => 'Close',
