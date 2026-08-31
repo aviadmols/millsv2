@@ -459,7 +459,7 @@ class CardUpdateService
             ->get();
 
         foreach ($blocked as $subscription) {
-            $moved = self::skipMissedCycles($subscription);
+            $moved = self::alignToNextCycle($subscription);
 
             $subscription->forceFill(['payment_state' => PaymentState::PAYME->value])->save();
 
@@ -484,25 +484,28 @@ class CardUpdateService
     }
 
     /**
-     * Move a lapsed charge date forward to the next cycle that has not happened yet.
+     * Point the subscription at the customer's NEXT order in their own sequence.
      *
-     * A customer whose card expired in May and who fixes it in August must be billed for
-     * September — not for May, June, July and August. Lifting the wall without this left the
-     * old due date sitting in the past, so the first thing that happened after they helpfully
-     * entered a new card was a charge for a box they never received. For the imported iCount
-     * book, whose dates are months stale by definition, that would have been every single one
-     * of them.
+     * This does not move anyone's billing cycle. The cadence and the billing day belong to
+     * the customer — due on the 5th, still the 5th; a two-month plan still steps two months
+     * — and all this does is stop pointing at a date that has already gone by.
      *
-     * Whole cycles only, so the customer keeps their billing day: due on the 5th, still the
-     * 5th. A date falling TODAY is not a missed cycle and is left alone.
+     * It exists because lifting the wall left the old due date sitting in the past, so the
+     * first thing that happened after a customer helpfully entered a new card was a charge
+     * for a box they never received. For the imported iCount book, whose dates are months
+     * stale by definition, that would have been every single one of them.
+     *
+     * A date landing TODAY stays today and is charged — that is a live cycle, not a missed
+     * one — UNLESS an order has already been paid for today, in which case charging again
+     * would bill the same day twice.
      *
      * @return array{charge_date_from: string, charge_date_to: string}|null null when nothing moved
      */
-    private static function skipMissedCycles(Subscription $subscription): ?array
+    private static function alignToNextCycle(Subscription $subscription): ?array
     {
         $due = $subscription->next_charge_at;
 
-        if ($due === null || ! $due->copy()->startOfDay()->lt(now()->startOfDay())) {
+        if ($due === null) {
             return null;
         }
 
@@ -514,12 +517,45 @@ class CardUpdateService
             $next->addMonthsNoOverflow($months);
         }
 
+        if ($next->isSameDay(now()) && self::alreadyPaidToday($subscription)) {
+            $next->addMonthsNoOverflow($months);
+        }
+
+        if ($next->toDateString() === $due->toDateString()) {
+            return null;
+        }
+
         $subscription->next_charge_at = $next;
 
         return [
             'charge_date_from' => $due->toDateString(),
             'charge_date_to' => $next->toDateString(),
         ];
+    }
+
+    /**
+     * Has this subscription already been paid for today?
+     *
+     * Two ways it can have been, and both must count. A charge WE took leaves a settled
+     * ledger row. A checkout the customer paid at the till leaves none — the ingestor writes
+     * no ledger row — so the subscription born from that order is the only trace, and
+     * without it someone who signed up this morning and fixed their card this afternoon
+     * would be charged a second time on their first day.
+     */
+    private static function alreadyPaidToday(Subscription $subscription): bool
+    {
+        $charged = PaymentLedger::query()
+            ->where('subscription_id', $subscription->id)
+            ->where('status', LedgerStatus::SUCCEEDED->value)
+            ->whereDate('executed_at', now()->toDateString())
+            ->exists();
+
+        if ($charged) {
+            return true;
+        }
+
+        return $subscription->original_order_id !== null
+            && $subscription->created_at?->isToday() === true;
     }
 
     private function pickSubscription(Customer $customer): ?Subscription

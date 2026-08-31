@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\ActivityEvent;
 use App\Models\Customer;
+use App\Models\PaymentLedger;
 use App\Models\Subscription;
+use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\CardUpdateService;
@@ -96,6 +98,74 @@ class NoBackChargeAfterCardUpdateTest extends TestCase
         $this->lift($subscription);
 
         $this->assertTrue($subscription->fresh()->next_charge_at->isToday());
+    }
+
+    public function test_today_is_not_charged_twice_when_a_charge_already_went_through_today(): void
+    {
+        /*
+         * Aviad's rule: today is chargeable UNLESS an order has already been paid for
+         * today. Landing the customer on a date they have already paid would bill the same
+         * day twice — the exact complaint this whole change came from.
+         */
+        // Frozen mid-month: on the 31st "two months ago, same day" does not exist, and the
+        // test would be arguing with the calendar rather than with the rule.
+        $this->travelTo('2026-08-15 10:00:00');
+
+        $subscription = $this->blockedSubscription('2026-06-15 00:00:00');
+
+        $row = PaymentLedger::query()->create([
+            'subscription_id' => $subscription->id,
+            'context' => 'recurring',
+            'idempotency_key' => uniqid('k', true),
+            'amount' => 171.00,
+            'currency' => 'ILS',
+            'executed_at' => now(),
+        ]);
+        $row->forceFill(['status' => LedgerStatus::SUCCEEDED->value])->save();
+
+        $this->lift($subscription);
+
+        $next = $subscription->fresh()->next_charge_at;
+
+        $this->assertFalse($next->isToday(), 'a day already paid for must not be charged again');
+        $this->assertTrue($next->isFuture());
+        $this->assertSame($subscription->next_charge_at->day, $next->day, 'the cadence still belongs to the customer');
+    }
+
+    public function test_a_failed_charge_today_does_not_count_as_paid(): void
+    {
+        // The whole point of fixing a card is to collect the cycle the failure missed.
+        $subscription = $this->blockedSubscription(now()->subMonth()->setDay(now()->day)->toDateTimeString());
+
+        $row = PaymentLedger::query()->create([
+            'subscription_id' => $subscription->id,
+            'context' => 'recurring',
+            'idempotency_key' => uniqid('k', true),
+            'amount' => 171.00,
+            'currency' => 'ILS',
+            'executed_at' => now(),
+        ]);
+        $row->forceFill(['status' => LedgerStatus::FAILED->value])->save();
+
+        $this->lift($subscription);
+
+        $this->assertTrue($subscription->fresh()->next_charge_at->isToday());
+    }
+
+    public function test_someone_who_checked_out_today_is_not_charged_again_the_same_day(): void
+    {
+        /*
+         * A checkout leaves NO ledger row — the ingestor writes none — so the subscription
+         * born from that order is the only trace that today was already paid for. Without
+         * this, signing up in the morning and fixing a card in the afternoon bills twice on
+         * day one.
+         */
+        $subscription = $this->blockedSubscription(now()->startOfDay()->toDateTimeString());
+        $subscription->forceFill(['original_order_id' => '9001', 'created_at' => now()])->save();
+
+        $this->lift($subscription);
+
+        $this->assertFalse($subscription->fresh()->next_charge_at->isToday());
     }
 
     public function test_a_future_date_is_left_alone(): void
