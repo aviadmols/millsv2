@@ -44,4 +44,10 @@ return [
 
     'empty' => 'No discount rules',
     'empty_help' => 'With no rules, the recurring cycle is billed at the store price. Add a rule to discount by product, tag, frequency or pack size.',
+
+    'excluded_products' => 'Products that get no discount',
+    'excluded_variants' => 'Variants that get no discount',
+    'excluded_help' => 'An exclusion beats everything: a product chosen here never receives this rule\'s discount, even if it meets every other condition.',
+    'excluded_count' => ':count excluded',
+    'none' => 'None',
 ];

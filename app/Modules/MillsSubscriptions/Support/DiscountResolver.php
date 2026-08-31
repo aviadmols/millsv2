@@ -134,7 +134,23 @@ final class DiscountResolver
      */
     private static function matchingLines(DiscountRule $rule, array $lines): array
     {
-        if (! $rule->hasProductConditions()) {
+        /*
+         * Exclusions come off FIRST and are absolute: a product named here is never
+         * discounted by this rule, however well it matches everything else. That ordering
+         * is the whole point — "10% off the food but not the treat" must not become 10% off
+         * the treat as well because the treat also happens to carry the discounted tag.
+         */
+        if ($rule->hasExclusions()) {
+            $excludedProducts = array_map('strval', (array) ($rule->excluded_product_ids ?? []));
+            $excludedVariants = array_map('strval', (array) ($rule->excluded_variant_ids ?? []));
+
+            $lines = array_values(array_filter($lines, fn (array $line) => ! in_array($line['variant_id'], $excludedVariants, true)
+                && ! in_array($line['product_id'], $excludedProducts, true)));
+        }
+
+        // Nothing said about WHICH products, beyond what was excluded: everything that is
+        // left is what the rule applies to.
+        if (! $rule->hasInclusions()) {
             return $lines;
         }
 

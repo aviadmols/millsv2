@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\DiscountRule;
 use App\Models\Dog;
 use App\Models\PaymentLedger;
 use App\Models\Product;
@@ -32,6 +33,16 @@ class PaidOrderTotalsTest extends TestCase
 
     /** @var array<string, mixed> the order body we would have sent to Shopify */
     private array $sent = [];
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The store's live rule ships as a data migration. These tests are about the
+        // ARITHMETIC of the order, so they start from no rules and add one where the name
+        // on the invoice is the thing under test.
+        DiscountRule::query()->delete();
+    }
 
     private function variant(string $id, float $price): ProductVariant
     {
@@ -126,6 +137,26 @@ class PaidOrderTotalsTest extends TestCase
             round($lines - (float) $this->sent['discount_codes'][0]['amount'], 2),
             round((float) $this->sent['transactions'][0]['amount'], 2),
         );
+    }
+
+    public function test_the_rule_that_granted_the_discount_is_what_the_customer_reads(): void
+    {
+        /*
+         * The merchant chose that wording for customers to see. A generic "Subscriber
+         * discount" on an invoice for a named promotion tells the customer nothing about
+         * why their price changed.
+         */
+        [$subscription, $ledger] = $this->scenario(charged: 153.90);
+
+        DiscountRule::query()->create([
+            'name' => 'מבצע פרימיום',
+            'percent' => 10,
+            'scope' => DiscountRule::SCOPE_ORDER,
+        ]);
+
+        $this->createOrder($subscription, $ledger);
+
+        $this->assertSame('מבצע פרימיום', $this->sent['discount_codes'][0]['code']);
     }
 
     public function test_an_undiscounted_order_carries_no_discount_line(): void

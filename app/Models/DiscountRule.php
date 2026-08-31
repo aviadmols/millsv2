@@ -23,7 +23,8 @@ class DiscountRule extends Model
 
     protected $fillable = [
         'name', 'is_active', 'percent', 'scope',
-        'frequency_months', 'product_ids', 'variant_ids', 'tags', 'pack_sizes', 'priority',
+        'frequency_months', 'product_ids', 'variant_ids', 'tags', 'pack_sizes',
+        'excluded_product_ids', 'excluded_variant_ids', 'priority',
     ];
 
     protected function casts(): array
@@ -37,7 +38,24 @@ class DiscountRule extends Model
             'variant_ids' => 'array',
             'tags' => 'array',
             'pack_sizes' => 'array',
+            'excluded_product_ids' => 'array',
+            'excluded_variant_ids' => 'array',
         ];
+    }
+
+    /** Does the rule name the products it applies TO (as opposed to the ones it skips)? */
+    public function hasInclusions(): bool
+    {
+        return ! empty($this->product_ids)
+            || ! empty($this->variant_ids)
+            || ! empty($this->tags)
+            || ! empty($this->pack_sizes);
+    }
+
+    /** Products this rule must never discount, whatever else it matches. */
+    public function hasExclusions(): bool
+    {
+        return ! empty($this->excluded_product_ids) || ! empty($this->excluded_variant_ids);
     }
 
     /**
@@ -49,9 +67,9 @@ class DiscountRule extends Model
      */
     public function hasProductConditions(): bool
     {
-        return ! empty($this->product_ids)
-            || ! empty($this->variant_ids)
-            || ! empty($this->tags)
-            || ! empty($this->pack_sizes);
+        // An exclusion IS a statement about which products are discounted — "everything
+        // except this one". Without it counting here, "10% off the food but not the treat"
+        // would fall back to an order-wide discount and quietly discount the treat too.
+        return $this->hasInclusions() || $this->hasExclusions();
     }
 }

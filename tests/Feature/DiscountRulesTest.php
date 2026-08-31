@@ -25,6 +25,19 @@ class DiscountRulesTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        /*
+         * The store's own rule ships as a data migration, so it exists in every database
+         * including this one. These tests are about the ENGINE — each builds the exact set
+         * of rules it is reasoning about, and a stray live rule silently out-competing them
+         * would make the failures read as engine bugs.
+         */
+        DiscountRule::query()->delete();
+    }
+
     private function variant(string $id, float $price, ?int $packSize = null, array $tags = []): ProductVariant
     {
         $product = Product::query()->create([
@@ -216,6 +229,68 @@ class DiscountRulesTest extends TestCase
         DiscountRule::query()->create(['name' => 'Store-wide', 'percent' => 10]);
 
         $this->assertNull(DiscountResolver::for($this->subscription(), $this->lines(['999' => 1])));
+    }
+
+    public function test_an_excluded_product_never_receives_the_discount(): void
+    {
+        /*
+         * The store's actual policy: 10% off the recurring order EXCEPT one product. An
+         * order-wide 10% would take its cut off that product too by way of the total, so
+         * the rule is line-scoped and the exclusion decides which lines.
+         */
+        $this->variant('100', 200.00);
+        $excluded = $this->variant('9991874183472', 100.00);
+
+        DiscountRule::query()->create([
+            'name' => 'הנחת מנוי',
+            'percent' => 10,
+            'scope' => DiscountRule::SCOPE_MATCHING_LINES,
+            'excluded_variant_ids' => ['9991874183472'],
+        ]);
+
+        $decision = DiscountResolver::for($this->subscription(), $this->lines(['100' => 1, '9991874183472' => 1]));
+
+        $this->assertSame(DiscountRule::SCOPE_MATCHING_LINES, $decision['scope']);
+        $this->assertSame(['100'], $decision['variant_ids']);
+        // 10% of the ₪200 line only — never of the ₪300 order.
+        $this->assertSame(20.0, $decision['value']);
+        $this->assertNotContains((string) $excluded->shopify_variant_id, $decision['variant_ids']);
+    }
+
+    public function test_an_exclusion_beats_a_tag_the_product_also_carries(): void
+    {
+        // Otherwise "10% off the premium range, but not the treat" silently discounts the
+        // treat the moment somebody tags it premium.
+        $this->variant('100', 200.00, null, ['premium']);
+        $this->variant('200', 60.00, null, ['premium']);
+
+        DiscountRule::query()->create([
+            'name' => 'Premium', 'percent' => 10,
+            'scope' => DiscountRule::SCOPE_MATCHING_LINES,
+            'tags' => ['premium'], 'excluded_variant_ids' => ['200'],
+        ]);
+
+        $decision = DiscountResolver::for($this->subscription(), $this->lines(['100' => 1, '200' => 1]));
+
+        $this->assertSame(['100'], $decision['variant_ids']);
+    }
+
+    public function test_a_product_id_exclusion_works_as_well_as_a_variant_id_one(): void
+    {
+        // The number comes off a Shopify admin URL, where product and variant ids look the
+        // same, so the seeded rule registers it in both columns.
+        $this->variant('100', 200.00);
+        $this->variant('555', 100.00);
+
+        DiscountRule::query()->create([
+            'name' => 'By product', 'percent' => 10,
+            'scope' => DiscountRule::SCOPE_MATCHING_LINES,
+            'excluded_product_ids' => ['p-555'],
+        ]);
+
+        $decision = DiscountResolver::for($this->subscription(), $this->lines(['100' => 1, '555' => 1]));
+
+        $this->assertSame(['100'], $decision['variant_ids']);
     }
 
     public function test_quantity_counts_towards_what_a_rule_is_worth(): void

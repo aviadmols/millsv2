@@ -12,7 +12,6 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 /**
@@ -66,7 +65,9 @@ class DiscountRuleForm
                 ]),
 
             Section::make(__('discounts.section_when'))
-                ->description(__('discounts.section_when_help'))
+                // The note belongs in the description: Section has no hint/hintIcon, and
+                // calling one 500s the whole page rather than degrading to a missing hint.
+                ->description(__('discounts.section_when_help').' '.__('discounts.matching_note'))
                 ->schema([
                     Select::make('frequency_months')
                         ->label(__('discounts.frequency'))
@@ -130,16 +131,60 @@ class DiscountRuleForm
                             ->all())
                         ->placeholder(__('discounts.any')),
 
+                    /*
+                     * Exclusions are absolute and come off before anything else. This is
+                     * how "10% off the food but NOT the treat" is written — as one rule
+                     * that survives the catalogue changing, rather than a hand-kept list of
+                     * every product that should be discounted, which goes stale the day a
+                     * new flavour is added.
+                     */
+                    Select::make('excluded_product_ids')
+                        ->label(__('discounts.excluded_products'))
+                        ->helperText(__('discounts.excluded_help'))
+                        ->multiple()
+                        ->searchable()
+                        ->optionsLimit(500)
+                        ->options(fn () => Product::query()
+                            ->orderBy('title')
+                            ->pluck('title', 'shopify_product_id')
+                            ->all())
+                        ->placeholder(__('discounts.none')),
+
+                    Select::make('excluded_variant_ids')
+                        ->label(__('discounts.excluded_variants'))
+                        ->helperText(__('discounts.excluded_help'))
+                        ->multiple()
+                        ->searchable()
+                        ->optionsLimit(500)
+                        ->getSearchResultsUsing(fn (string $search) => ProductVariant::query()
+                            ->with('product')
+                            ->where('title', 'like', "%{$search}%")
+                            ->orWhere('sku', 'like', "%{$search}%")
+                            ->limit(50)
+                            ->get()
+                            ->mapWithKeys(fn (ProductVariant $v) => [
+                                (string) $v->shopify_variant_id => self::variantLabel($v),
+                            ])
+                            ->all())
+                        ->getOptionLabelsUsing(fn (array $values) => ProductVariant::query()
+                            ->with('product')
+                            ->whereIn('shopify_variant_id', array_map(
+                                fn ($v) => ShopifyId::numeric((string) $v),
+                                $values,
+                            ))
+                            ->get()
+                            ->mapWithKeys(fn (ProductVariant $v) => [
+                                (string) $v->shopify_variant_id => self::variantLabel($v),
+                            ])
+                            ->all())
+                        ->placeholder(__('discounts.none')),
+
                     TextInput::make('priority')
                         ->label(__('discounts.priority'))
                         ->helperText(__('discounts.priority_help'))
                         ->numeric()
                         ->default(0),
-                ])
-                // The one sentence that prevents the commonest misreading of this screen.
-                ->footerActions([])
-                ->hintIcon('heroicon-o-information-circle')
-                ->hint(fn (Get $get) => __('discounts.matching_note')),
+                ]),
         ]);
     }
 

@@ -87,6 +87,14 @@ class DiscountRulesTable
             $parts[] = __('discounts.variants').': '.count((array) $rule->variant_ids);
         }
 
+        // Exclusions change what a rule does more than any of the above, so they are never
+        // hidden behind "applies to all".
+        $excluded = count((array) $rule->excluded_product_ids) + count((array) $rule->excluded_variant_ids);
+
+        if ($excluded > 0) {
+            $parts[] = __('discounts.excluded_count', ['count' => $excluded]);
+        }
+
         // No conditions is a real, deliberate state — say so rather than showing a blank.
         return $parts === [] ? [__('discounts.applies_to_all')] : $parts;
     }
