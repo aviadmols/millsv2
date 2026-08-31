@@ -51,6 +51,7 @@ return [
     'model_dog' => 'כלב',
     'sum_payment_state' => 'מצב תשלום: :state',
     'reason_self_service' => 'הלקוח ביצע זאת מהאזור האישי',
+    'reason_missed_cycles_skipped' => 'הועבר קדימה אחרי עדכון כרטיס — הלקוח לא חויב על מחזורים שהוחמצו',
     'sum_fields_changed' => 'הלקוח עדכן: :fields',
     'field_subscription_status' => 'סטטוס המנוי',
     'field_frequency' => 'תדירות המשלוח',

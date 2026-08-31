@@ -210,7 +210,17 @@ final class EventPresenter
             ]);
         }
 
-        return $parts === [] ? self::readableDetails($d) : implode(' · ', $parts);
+        if ($parts === []) {
+            return self::readableDetails($d);
+        }
+
+        $line = implode(' · ', $parts);
+
+        // Why it moved, when something other than the customer moved it — a date that
+        // changed by itself is alarming until the row says who and what for.
+        $reason = trim((string) ($d['reason'] ?? ''));
+
+        return $reason === '' ? $line : $line.' — '.$reason;
     }
 
     private static function frequencyLabel(mixed $months): string

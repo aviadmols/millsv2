@@ -51,6 +51,7 @@ return [
     'model_dog' => 'Dog',
     'sum_payment_state' => 'Payment state: :state',
     'reason_self_service' => 'done by the customer in their account area',
+    'reason_missed_cycles_skipped' => 'moved forward after a card update — the customer was not billed for missed cycles',
     'sum_fields_changed' => 'The customer updated: :fields',
     'field_subscription_status' => 'subscription status',
     'field_frequency' => 'delivery frequency',

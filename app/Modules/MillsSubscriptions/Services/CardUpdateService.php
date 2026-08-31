@@ -454,9 +454,72 @@ class CardUpdateService
      */
     public function liftCardUpdateWall(Customer $customer): int
     {
-        return $customer->subscriptions()
+        $blocked = $customer->subscriptions()
             ->where('payment_state', PaymentState::NEEDS_CARD_UPDATE->value)
-            ->update(['payment_state' => PaymentState::PAYME->value]);
+            ->get();
+
+        foreach ($blocked as $subscription) {
+            $moved = self::skipMissedCycles($subscription);
+
+            $subscription->forceFill(['payment_state' => PaymentState::PAYME->value])->save();
+
+            if ($moved === null) {
+                continue;
+            }
+
+            SystemLog::info('billing', 'missed cycles skipped after a card update', [
+                'from' => $moved['charge_date_from'],
+                'to' => $moved['charge_date_to'],
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $customer->id]);
+
+            Timeline::record(
+                Timeline::KIND_PLAN_UPDATED,
+                $moved + ['reason' => __('activity.reason_missed_cycles_skipped')],
+                $subscription->id,
+                $customer->id,
+            );
+        }
+
+        return $blocked->count();
+    }
+
+    /**
+     * Move a lapsed charge date forward to the next cycle that has not happened yet.
+     *
+     * A customer whose card expired in May and who fixes it in August must be billed for
+     * September — not for May, June, July and August. Lifting the wall without this left the
+     * old due date sitting in the past, so the first thing that happened after they helpfully
+     * entered a new card was a charge for a box they never received. For the imported iCount
+     * book, whose dates are months stale by definition, that would have been every single one
+     * of them.
+     *
+     * Whole cycles only, so the customer keeps their billing day: due on the 5th, still the
+     * 5th. A date falling TODAY is not a missed cycle and is left alone.
+     *
+     * @return array{charge_date_from: string, charge_date_to: string}|null null when nothing moved
+     */
+    private static function skipMissedCycles(Subscription $subscription): ?array
+    {
+        $due = $subscription->next_charge_at;
+
+        if ($due === null || ! $due->copy()->startOfDay()->lt(now()->startOfDay())) {
+            return null;
+        }
+
+        $months = max(1, (int) $subscription->frequency_months);
+        $next = $due->copy();
+
+        // Bounded: a date corrupted to the distant past must not spin here forever.
+        for ($i = 0; $i < 600 && $next->copy()->startOfDay()->lt(now()->startOfDay()); $i++) {
+            $next->addMonthsNoOverflow($months);
+        }
+
+        $subscription->next_charge_at = $next;
+
+        return [
+            'charge_date_from' => $due->toDateString(),
+            'charge_date_to' => $next->toDateString(),
+        ];
     }
 
     private function pickSubscription(Customer $customer): ?Subscription
