@@ -12,6 +12,7 @@ use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Services\Shopify\OrderHistoryService;
+use App\Modules\MillsSubscriptions\Support\ChargePreview;
 use App\Modules\MillsSubscriptions\Support\SubscriptionPricing;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
@@ -214,6 +215,19 @@ class SubscriptionInfolist
                         ->columnSpanFull()
                         ->view('filament.infolists.upcoming-order')
                         ->state(fn (Subscription $record) => self::upcomingOrder($record)),
+
+                    /*
+                     * Where the number comes from. The draft above shows ONE figure with no
+                     * account of itself, so a discount that changed, a product that was
+                     * swapped, or a stored total gone stale were all invisible until they
+                     * surfaced on a customer's invoice. This is the same arithmetic the
+                     * biller does, shown before it is charged rather than after.
+                     */
+                    ViewEntry::make('charge_preview')
+                        ->label(__('subscriptions.preview_heading'))
+                        ->columnSpanFull()
+                        ->view('filament.infolists.charge-preview')
+                        ->state(fn (Subscription $record) => ChargePreview::for($record)),
                 ]),
 
             // Each dog, its computed requirement, and the products it is billed for.

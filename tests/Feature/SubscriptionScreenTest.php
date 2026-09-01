@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\DiscountRule;
 use App\Models\Dog;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -147,6 +148,28 @@ class SubscriptionScreenTest extends TestCase
         $this->get("/admin/subscriptions/{$subscription->id}")
             ->assertSuccessful()
             ->assertSee('182.90');
+    }
+
+    public function test_the_screen_accounts_for_the_number_instead_of_just_showing_it(): void
+    {
+        /*
+         * The draft total on its own says nothing about how it was reached, which is how a
+         * ₪118 "discount" reached a customer's invoice before anybody noticed. The
+         * breakdown names the rule, the money it takes off, and the figure that will be
+         * charged — and says so when the stored amount no longer agrees.
+         */
+        $this->actingAs(User::factory()->create());
+        [, $subscription] = $this->scenario();
+
+        DiscountRule::query()->delete();
+        DiscountRule::query()->create(['name' => 'הנחת מנוי', 'percent' => 10]);
+
+        $this->get("/admin/subscriptions/{$subscription->id}")
+            ->assertSuccessful()
+            ->assertSee(__('subscriptions.preview_subtotal'))
+            ->assertSee('הנחת מנוי')
+            ->assertSee('17.10')      // what the rule takes off ₪171.00 of product
+            ->assertSee('153.90');    // what the customer would be charged
     }
 
     public function test_an_unknown_amount_is_never_guessed(): void

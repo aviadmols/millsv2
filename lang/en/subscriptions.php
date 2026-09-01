@@ -177,6 +177,16 @@ return [
     'upcoming_needs_a_line' => 'An order needs at least one product',
     'edited_by_hand' => 'This upcoming order was edited by hand',
 
+    'preview_heading' => 'What will actually be charged',
+    'preview_subtotal' => 'Products (store price)',
+    'preview_total' => 'To charge',
+    'preview_no_discount' => 'No discount applies to this order',
+    'preview_discounted' => 'discounted',
+    'preview_scope_lines' => 'on the matching products',
+    'preview_scope_order' => 'on the whole order',
+    'preview_unpriced' => ':count products have no price in the system — they are left out of this sum, and the real charge may differ. Run "Sync products from Shopify".',
+    'preview_stale' => 'The stored charge amount is :stored, but the current products and rules come to :computed. The stored figure is out of date — press "Refresh upcoming order" before the next charge.',
+
     'action_refresh_upcoming' => 'Refresh upcoming orders',
     'refresh_upcoming_heading' => 'Rebuild every upcoming order',
     'refresh_upcoming_help' => 'What each customer is charged is the stored total of their upcoming order, and it only updates when something touches that subscription. This rebuilds the upcoming order for :count subscriptions against Shopify — so the amounts follow the store\'s prices and the discount configured now (0%). A customer\'s amount may change. A subscription Shopify cannot price keeps its existing amount.',

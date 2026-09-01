@@ -12,6 +12,7 @@ use App\Modules\MillsSubscriptions\Services\CardUpdateService;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
 use App\Modules\MillsSubscriptions\Services\SubscriptionActions;
+use App\Modules\MillsSubscriptions\Support\ChargePreview;
 use App\Modules\MillsSubscriptions\Support\SmsTemplate;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
@@ -22,11 +23,13 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Throwable;
@@ -143,6 +146,10 @@ class ViewSubscription extends ViewRecord
                     ->addActionLabel(__('subscriptions.add_product'))
                     ->reorderable(false)
                     ->columns(3)
+                    // Live, so the money below answers the edit being made right now. An
+                    // order editor that shows you the OLD total is how the wrong number
+                    // gets saved with confidence.
+                    ->live(debounce: 400)
                     ->schema([
                         Select::make('variant_id')
                             ->label(__('subscriptions.product'))
@@ -157,6 +164,18 @@ class ViewSubscription extends ViewRecord
                             ->default(1)
                             ->required(),
                     ]),
+
+                /*
+                 * The whole point of this screen: which discount applies, and what the
+                 * customer will actually be charged — priced from the store's own products
+                 * and run through the SAME resolver that bills, so the two cannot disagree.
+                 */
+                Placeholder::make('charge_preview')
+                    ->label(__('subscriptions.preview_heading'))
+                    ->content(fn (Get $get, Subscription $record) => view(
+                        'filament.infolists.charge-preview',
+                        ['preview' => ChargePreview::for($record, self::formLines($get('lines')))],
+                    )),
             ])
             ->action(function (Subscription $record, array $data) {
                 $lines = collect($data['lines'] ?? [])
@@ -206,6 +225,27 @@ class ViewSubscription extends ViewRecord
 
                 $this->redirect(static::getResource()::getUrl('view', ['record' => $record]));
             });
+    }
+
+    /**
+     * The repeater's rows, cleaned into the shape the pricing understands.
+     *
+     * Called on every keystroke while the form is live, so a half-typed row — a product
+     * chosen with no quantity yet, a blank line just added — must not blow up the preview
+     * that is meant to be guiding the edit.
+     *
+     * @return list<array{variant_id: string, quantity: int}>
+     */
+    private static function formLines(mixed $lines): array
+    {
+        return collect(is_array($lines) ? $lines : [])
+            ->filter(fn ($line) => is_array($line) && ! empty($line['variant_id']))
+            ->map(fn ($line) => [
+                'variant_id' => (string) $line['variant_id'],
+                'quantity' => max(1, (int) ($line['quantity'] ?? 1)),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
