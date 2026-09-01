@@ -276,7 +276,15 @@ class SubscriptionScreenTest extends TestCase
         $subscription = $subscription->fresh();
         $this->assertSame('0.00', (string) $subscription->discount_percent);
 
-        $this->assertArrayNotHasKey('appliedDiscount', $this->draftInput($subscription));
+        /*
+         * Present and NULL — never merely absent. draftOrderUpdate leaves out any field it
+         * is not given, so an omitted discount let the old order-wide 10% survive every
+         * rebuild and stack under the new line-level rule: the customer discounted twice,
+         * and the doubled reduction stored as the amount to charge (subscription 469).
+         */
+        $input = $this->draftInput($subscription);
+        $this->assertArrayHasKey('appliedDiscount', $input);
+        $this->assertNull($input['appliedDiscount']);
     }
 
     public function test_a_discount_granted_deliberately_is_still_applied(): void
@@ -292,12 +300,37 @@ class SubscriptionScreenTest extends TestCase
         $this->assertSame(15.0, $input['appliedDiscount']['value']);
     }
 
-    public function test_a_zero_discount_subscription_gets_no_discount_line(): void
+    public function test_a_zero_discount_subscription_clears_the_discount_rather_than_omitting_it(): void
     {
         [, $subscription] = $this->scenario();
         $subscription->forceFill(['discount_percent' => 0])->save();
 
-        $this->assertArrayNotHasKey('appliedDiscount', $this->draftInput($subscription->fresh()));
+        $input = $this->draftInput($subscription->fresh());
+
+        $this->assertArrayHasKey('appliedDiscount', $input);
+        $this->assertNull($input['appliedDiscount']);
+    }
+
+    public function test_a_line_scoped_rule_still_clears_the_order_level_discount(): void
+    {
+        /*
+         * The exact shape of the 469 double: line-level discounts in the input, order-level
+         * field omitted, and the stale order-wide 10% surviving underneath them.
+         */
+        [, $subscription] = $this->scenario();
+
+        DiscountRule::query()->delete();
+        DiscountRule::query()->create([
+            'name' => 'הנחת מנוי',
+            'percent' => 10,
+            'scope' => DiscountRule::SCOPE_MATCHING_LINES,
+            'excluded_variant_ids' => ['none-such'],
+        ]);
+
+        $input = $this->draftInput($subscription->fresh());
+
+        $this->assertNull($input['appliedDiscount'], 'the order-level slot must be explicitly cleared');
+        $this->assertSame(10.0, $input['lineItems'][0]['appliedDiscount']['value'] ?? null);
     }
 
     public function test_the_upcoming_order_carries_no_shipping_line(): void

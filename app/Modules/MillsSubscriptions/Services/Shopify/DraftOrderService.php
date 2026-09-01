@@ -284,6 +284,16 @@ class DraftOrderService
          */
         $decision = DiscountResolver::for($subscription, $lineItems);
 
+        /*
+         * ALWAYS set the order-level discount field — to a value or to null — never omit
+         * it. draftOrderUpdate leaves any field it is not given untouched, so a draft that
+         * carried the old order-wide 10% KEPT it when the input said nothing about it, and
+         * the new line-level discount landed on top: the customer discounted twice, and the
+         * doubly-reduced total stored as the amount to charge. Found on subscription 469
+         * after the 2026-09-01 sweep quietly did this to the whole book.
+         */
+        $input['appliedDiscount'] = null;
+
         if ($decision !== null) {
             $input = $this->applyDiscount($input, $decision);
         }
