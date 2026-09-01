@@ -185,7 +185,7 @@ return [
     'preview_scope_lines' => 'on the matching products',
     'preview_scope_order' => 'on the whole order',
     'preview_unpriced' => ':count products have no price in the system — they are left out of this sum, and the real charge may differ. Run "Sync products from Shopify".',
-    'preview_stale' => 'The stored charge amount is :stored, but the current products and rules come to :computed. The stored figure is out of date — press "Refresh upcoming order" before the next charge.',
+    'preview_stale' => 'The stored charge amount is :stored, but the current products and rules come to :computed. The stored figure is out of date — press "Build upcoming order" on this screen, or "Refresh upcoming orders" on the subscriptions list to fix everyone.',
 
     'action_refresh_upcoming' => 'Refresh upcoming orders',
     'refresh_upcoming_heading' => 'Rebuild every upcoming order',
