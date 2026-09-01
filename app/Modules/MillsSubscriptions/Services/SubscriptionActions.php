@@ -170,7 +170,15 @@ class SubscriptionActions
     public function refreshUpcomingOrder(Subscription $subscription): array
     {
         try {
-            return $this->drafts->ensure($subscription);
+            /*
+             * refresh(), never ensure(). ensure() hands back the existing open draft
+             * untouched — right for DISPLAYING the screen, and exactly wrong here: both
+             * callers have just changed something (an admin pressed "build", or edited the
+             * lines) and want the draft REBUILT. Behind ensure(), the build button read the
+             * stale double-discounted draft back and toasted its old total as if it had
+             * done something (subscription 469, 2026-09-02).
+             */
+            return $this->drafts->refresh($subscription);
         } catch (Throwable $e) {
             SystemLog::error('shopify', 'could not build the upcoming order', [
                 'message' => $e->getMessage(),
