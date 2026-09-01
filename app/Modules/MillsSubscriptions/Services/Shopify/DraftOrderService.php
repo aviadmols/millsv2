@@ -50,10 +50,10 @@ class DraftOrderService
     }
     GQL;
 
-    private const UPDATE = <<<'GQL'
-    mutation($id: ID!, $input: DraftOrderInput!) {
-      draftOrderUpdate(id: $id, input: $input) {
-        draftOrder { %FIELDS% }
+    private const DELETE = <<<'GQL'
+    mutation($input: DraftOrderDeleteInput!) {
+      draftOrderDelete(input: $input) {
+        deletedId
         userErrors { field message }
       }
     }
@@ -121,7 +121,16 @@ class DraftOrderService
         return $presented;
     }
 
-    /** Rebuild the draft to match the subscription's current products. */
+    /**
+     * Rebuild the draft to match the subscription's current products.
+     *
+     * DELETE and CREATE, never update-in-place. draftOrderUpdate keeps whatever the input
+     * does not mention — and it kept the order-level discount even when the input said
+     * `appliedDiscount: null` explicitly: subscription 469's draft was "rebuilt" on
+     * 2026-09-02 and came back with the identical stacked total, 594 × 0.9 × 0.9. A fresh
+     * draft inherits nothing, so what we send is ALL there is. The draft number changes;
+     * nothing depends on it — it is a preview object, and the new id is stored right here.
+     */
     public function refresh(Subscription $subscription): array
     {
         $this->assertConnected();
@@ -130,14 +139,26 @@ class DraftOrderService
             return $this->create($subscription);
         }
 
-        $result = $this->client->graphql($this->query(self::UPDATE), [
-            'id' => ShopifyId::gid((string) $subscription->draft_order_id, 'DraftOrder'),
-            'input' => $this->input($subscription),
-        ]);
+        try {
+            $result = $this->client->graphql(self::DELETE, [
+                'input' => ['id' => ShopifyId::gid((string) $subscription->draft_order_id, 'DraftOrder')],
+            ]);
+            $this->unwrap($result, 'draftOrderDelete');
+        } catch (Throwable $e) {
+            /*
+             * A draft that was already completed or deleted cannot be deleted again — and
+             * either way it is not the upcoming order any more. The fresh CREATE below is
+             * the answer in every one of those cases; only note what happened.
+             */
+            SystemLog::info('shopify', 'old draft could not be deleted before rebuild — creating fresh anyway', [
+                'draft_order_id' => $subscription->draft_order_id,
+                'message' => $e->getMessage(),
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+        }
 
-        $presented = $this->present($this->unwrap($result, 'draftOrderUpdate'));
+        $subscription->forceFill(['draft_order_id' => null])->save();
 
-        $this->storeAmount($subscription, $presented);
+        $presented = $this->create($subscription);
 
         SystemLog::info('shopify', 'draft order refreshed', [
             'draft_order_id' => $subscription->draft_order_id,
