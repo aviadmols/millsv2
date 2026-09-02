@@ -68,6 +68,14 @@ class PaidOrderTotalsTest extends TestCase
         $customer = Customer::query()->create([
             'email' => 'paid@example.com',
             'shopify_customer_id' => '900700',
+            'first_name' => 'גיל',
+            'last_name' => 'לגזיאל',
+            'phone' => '0504383830',
+            'address1' => 'הנדיב 26',
+            'address2' => 'קומה 2 דירה 3',
+            'city' => 'הרצליה',
+            'country' => 'Israel',
+            'zip' => '4648540',
         ]);
 
         $subscription = new Subscription;
@@ -137,6 +145,51 @@ class PaidOrderTotalsTest extends TestCase
             round($lines - (float) $this->sent['discount_codes'][0]['amount'], 2),
             round((float) $this->sent['transactions'][0]['amount'], 2),
         );
+    }
+
+    public function test_the_order_carries_the_customer_delivery_address(): void
+    {
+        /*
+         * Attaching the customer does NOT put an address on the order — Shopify copies
+         * nothing from the customer record for an order created through the API. Without
+         * this, every recurring order arrived unshippable: money taken, order recorded, and
+         * nobody able to say where the box goes (orders 74411, 74412, 74457).
+         */
+        [$subscription, $ledger] = $this->scenario(charged: 171.00);
+
+        $this->createOrder($subscription, $ledger);
+
+        $this->assertSame('הנדיב 26', $this->sent['shipping_address']['address1']);
+        $this->assertSame('קומה 2 דירה 3', $this->sent['shipping_address']['address2']);
+        $this->assertSame('הרצליה', $this->sent['shipping_address']['city']);
+        $this->assertSame('4648540', $this->sent['shipping_address']['zip']);
+        $this->assertSame('0504383830', $this->sent['shipping_address']['phone']);
+        $this->assertSame('גיל', $this->sent['shipping_address']['first_name']);
+
+        // Nothing here ever collects a separate billing address, and an empty one makes the
+        // order look half-filled in every export that reads it.
+        $this->assertSame($this->sent['shipping_address'], $this->sent['billing_address']);
+    }
+
+    public function test_an_address_too_thin_to_ship_to_is_reported_rather_than_dressed_up(): void
+    {
+        /*
+         * A street and a city are the minimum a courier can work with. The card is already
+         * charged, so the order is still created — a missing order is worse than an
+         * unshippable one — but it must not be created quietly.
+         */
+        [$subscription, $ledger] = $this->scenario(charged: 171.00);
+
+        $subscription->customer->forceFill(['address1' => null])->save();
+
+        $this->createOrder($subscription->fresh(), $ledger);
+
+        $this->assertArrayNotHasKey('shipping_address', $this->sent);
+        $this->assertArrayNotHasKey('billing_address', $this->sent);
+
+        $this->assertDatabaseHas('system_logs', [
+            'message' => 'order created with no deliverable address — nobody can ship it',
+        ]);
     }
 
     public function test_the_rule_that_granted_the_discount_is_what_the_customer_reads(): void

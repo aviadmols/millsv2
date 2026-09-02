@@ -79,6 +79,11 @@ class OrderCreationService
                 $order['customer'] = ['id' => (int) $subscription->customer->shopify_customer_id];
             }
 
+            // Where the box goes. Attaching the customer does NOT put an address on the
+            // order — Shopify copies nothing from the customer record for an order created
+            // through the API — so without this every recurring order arrived unshippable.
+            $order = $this->addShippingAddress($order, $subscription, $ledger);
+
             // The ONLY path that stamps channel attribution — never bypass it.
             $order = ShopifyOrderAttribution::apply($order, $subscription->id);
 
@@ -138,6 +143,62 @@ class OrderCreationService
         }
 
         return $items;
+    }
+
+    /**
+     * Put the customer's delivery address on the order.
+     *
+     * `customer: {id}` links the customer and nothing more: Shopify does not copy their
+     * default address onto an order created through the API, the way its own checkout does.
+     * That single missing step is why every order this system ever created arrived with no
+     * address — the money taken, the order recorded, and nobody able to say where the box
+     * goes (orders 74411, 74412, 74457).
+     *
+     * The address we hold locally IS the authority — it is what CustomerAddressPusher sends
+     * to Shopify as the customer's default — so the same mapping is used here, and the
+     * billing address is set to match: nothing in this system ever collects a separate one,
+     * and leaving it empty makes an order look half-filled in every export that reads it.
+     *
+     * An address too thin to ship to does NOT block the order. The card is already charged,
+     * and a missing order is worse than an unshippable one — but it is logged as the
+     * operational problem it is, rather than being created quietly.
+     *
+     * @param  array<string, mixed>  $order
+     * @return array<string, mixed>
+     */
+    private function addShippingAddress(array $order, Subscription $subscription, PaymentLedger $ledger): array
+    {
+        $customer = $subscription->customer;
+
+        $address = array_filter([
+            'first_name' => $customer?->first_name,
+            'last_name' => $customer?->last_name,
+            'address1' => $customer?->address1,
+            'address2' => $customer?->address2,
+            'city' => $customer?->city,
+            'province' => $customer?->province,
+            'country' => $customer?->country,
+            'zip' => $customer?->zip,
+            'phone' => $customer?->phone,
+        ], fn ($v) => $v !== null && trim((string) $v) !== '');
+
+        // A street and a city are the minimum a courier can work with. Anything less is not
+        // a partial address, it is no address — and sending it would dress the same failure
+        // up as success.
+        if (empty($address['address1']) || empty($address['city'])) {
+            SystemLog::warning('billing', 'order created with no deliverable address — nobody can ship it', [
+                'ledger_id' => $ledger->id,
+                'has_address1' => ! empty($address['address1']),
+                'has_city' => ! empty($address['city']),
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+
+            return $order;
+        }
+
+        $order['shipping_address'] = $address;
+        $order['billing_address'] = $address;
+
+        return $order;
     }
 
     /**
