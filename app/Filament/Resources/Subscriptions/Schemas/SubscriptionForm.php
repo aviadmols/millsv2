@@ -124,10 +124,12 @@ class SubscriptionForm
                              * subscription row had already been written. The admin saw an error
                              * and a subscription that existed anyway, with no dogs on it.
                              */
+                            // On CREATE the injected $record is the form's own record — the
+                            // subscription. On SAVE Filament injects the related model being
+                            // saved, i.e. the DOG, which already carries its customer; a
+                            // Subscription type-hint there threw on every edit (padonyi@,
+                            // changing a delivery date, 2026-09-08), so save is left alone.
                             ->mutateRelationshipDataBeforeCreateUsing(fn (array $data, Subscription $record) => $data + [
-                                'customer_id' => $record->customer_id,
-                            ])
-                            ->mutateRelationshipDataBeforeSaveUsing(fn (array $data, Subscription $record) => $data + [
                                 'customer_id' => $record->customer_id,
                             ])
                             // An empty row is not a dog. Saving one produces a nameless,
