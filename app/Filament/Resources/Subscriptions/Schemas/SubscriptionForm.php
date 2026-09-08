@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Subscriptions\Schemas;
 use App\Filament\Forms\AllergySelect;
 use App\Models\Dog;
 use App\Models\ProductVariant;
+use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\Recommendation\DogFoodRecommender;
@@ -115,6 +116,24 @@ class SubscriptionForm
                             ->itemLabel(fn (array $state) => $state['name'] ?? __('subscriptions.dogs'))
                             ->collapsed()
                             ->columns(3)
+                            /*
+                             * A dog belongs to a CUSTOMER as well as to a subscription, and
+                             * `dogs.customer_id` is NOT NULL. The relationship save fills in
+                             * subscription_id on its own and knows nothing about the customer,
+                             * so on a brand-new subscription the dog insert failed — AFTER the
+                             * subscription row had already been written. The admin saw an error
+                             * and a subscription that existed anyway, with no dogs on it.
+                             */
+                            ->mutateRelationshipDataBeforeCreateUsing(fn (array $data, Subscription $record) => $data + [
+                                'customer_id' => $record->customer_id,
+                            ])
+                            ->mutateRelationshipDataBeforeSaveUsing(fn (array $data, Subscription $record) => $data + [
+                                'customer_id' => $record->customer_id,
+                            ])
+                            // An empty row is not a dog. Saving one produces a nameless,
+                            // productless dog that then blocks the upcoming order.
+                            ->defaultItems(0)
+                            ->deletable()
                             ->schema([
                                 TextInput::make('name')->label(__('subscriptions.name')),
                                 TextInput::make('weight')->label('kg')->numeric()->live(debounce: 700),
