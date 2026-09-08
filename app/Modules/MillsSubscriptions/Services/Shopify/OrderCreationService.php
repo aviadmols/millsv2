@@ -2,6 +2,7 @@
 
 namespace App\Modules\MillsSubscriptions\Services\Shopify;
 
+use App\Models\AppSetting;
 use App\Models\PaymentLedger;
 use App\Models\ProductVariant;
 use App\Models\Subscription;
@@ -67,7 +68,9 @@ class OrderCreationService
                     'kind' => 'sale',
                     'status' => 'success',
                     'amount' => (string) $ledger->amount,
-                    'gateway' => (string) config('shopify.order_tx_gateway', 'manual'),
+                    // The name Shopify shows as the payment method. A LABEL — the money
+                    // moved through PayMe and Shopify only records it, whatever this says.
+                    'gateway' => self::gatewayLabel(),
                     'source' => (string) config('shopify.order_tx_source', 'external'),
                 ]],
             ];
@@ -144,6 +147,21 @@ class OrderCreationService
         }
 
         return $items;
+    }
+
+    /**
+     * What Shopify names as the payment method on the orders we create.
+     *
+     * Set in Settings so it reads as the store's real processor ("PayMe") rather than
+     * "manual". It is a label and nothing more: the charge went through PayMe and Shopify
+     * only RECORDS it, so a refund issued in Shopify still returns nothing to the customer
+     * whatever this says — the "החזר ללקוח" button on the payment ledger is the refund.
+     */
+    public static function gatewayLabel(): string
+    {
+        $label = trim((string) AppSetting::get('order_gateway_label', ''));
+
+        return $label !== '' ? $label : (string) config('shopify.order_tx_gateway', 'manual');
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\PaymentLedger;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Services\PayMe\PaymeClient;
+use App\Modules\MillsSubscriptions\Services\Shopify\OrderCreationService;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use App\Support\PaymentContextMasker;
@@ -159,7 +160,7 @@ class RefundService
             $refundTx = [
                 'amount' => number_format($amount, 2, '.', ''),
                 'kind' => 'refund',
-                'gateway' => (string) ($parent['gateway'] ?? config('shopify.order_tx_gateway', 'manual')),
+                'gateway' => (string) ($parent['gateway'] ?? OrderCreationService::gatewayLabel()),
             ];
 
             if ($parent !== null) {

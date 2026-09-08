@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\Customer;
 use App\Models\DiscountRule;
 use App\Models\Dog;
@@ -190,6 +191,21 @@ class PaidOrderTotalsTest extends TestCase
         $this->assertDatabaseHas('system_logs', [
             'message' => 'order created with no deliverable address — nobody can ship it',
         ]);
+    }
+
+    public function test_the_payment_method_name_is_whatever_settings_says(): void
+    {
+        // "PayMe" instead of "manual" — a label, and the refund path reads the order's own
+        // sale transaction rather than this setting, so the two can never disagree.
+        [$subscription, $ledger] = $this->scenario(charged: 171.00);
+
+        AppSetting::put('order_gateway_label', 'PayMe');
+        $this->createOrder($subscription, $ledger);
+        $this->assertSame('PayMe', $this->sent['transactions'][0]['gateway']);
+
+        AppSetting::put('order_gateway_label', '');
+        $this->createOrder($subscription, $ledger);
+        $this->assertSame('manual', $this->sent['transactions'][0]['gateway']);
     }
 
     public function test_the_rule_that_granted_the_discount_is_what_the_customer_reads(): void

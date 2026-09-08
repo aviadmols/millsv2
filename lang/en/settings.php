@@ -41,6 +41,9 @@ return [
     'billing' => 'Billing',
     'billing_help' => 'When the recurring charges run each day.',
     'billing_hour' => 'Daily billing hour (Israel time)',
+    'order_gateway_label' => 'Payment method name on orders',
+    'order_gateway_label_help' => 'What Shopify shows as the payment method on orders this system creates (e.g. "PayMe"). Empty = "manual". A label only: the money moves through PayMe and Shopify merely records it, so a refund issued in Shopify returns nothing to the customer whatever this says. The real refund is "Refund" on the payment ledger.',
+
     'shipping' => 'Delivery on the recurring charge',
     'shipping_help' => 'One rule: a subscription order whose products (after discount) come to less than the threshold pays a delivery fee. At the threshold and above, delivery is free. Both at 0 = free delivery for everyone, as now.',
     'shipping_fee' => 'Delivery fee',

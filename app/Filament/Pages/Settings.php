@@ -82,6 +82,7 @@ class Settings extends Page implements HasForms
             'shipping_fee' => (string) AppSetting::get('shipping_fee', '0'),
             'free_shipping_threshold' => (string) AppSetting::get('free_shipping_threshold', '0'),
             'shipping_title' => (string) AppSetting::get('shipping_title', ''),
+            'order_gateway_label' => (string) AppSetting::get('order_gateway_label', ''),
         ]);
     }
 
@@ -149,6 +150,13 @@ class Settings extends Page implements HasForms
                             ->maxValue(100)
                             ->suffix('%')
                             ->required(),
+
+                        TextInput::make('order_gateway_label')
+                            ->label(__('settings.order_gateway_label'))
+                            ->helperText(__('settings.order_gateway_label_help'))
+                            ->placeholder('PayMe')
+                            ->maxLength(40)
+                            ->columnSpanFull(),
                     ]),
 
                 /*
@@ -201,7 +209,7 @@ class Settings extends Page implements HasForms
             'from_address' => $d['from_address'] ?? null,
         ])->save();
 
-        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender', 'billing_hour', 'subscription_discount_percent', 'shipping_fee', 'free_shipping_threshold', 'shipping_title'] as $key) {
+        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender', 'billing_hour', 'subscription_discount_percent', 'shipping_fee', 'free_shipping_threshold', 'shipping_title', 'order_gateway_label'] as $key) {
             AppSetting::put($key, $d[$key] ?? null);
         }
 
