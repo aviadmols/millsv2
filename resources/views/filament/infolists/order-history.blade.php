@@ -43,6 +43,22 @@
                     <span class="mills-order__total">
                         ₪{{ number_format((float) ($order['total'] ?? 0), 2) }}
                     </span>
+
+                    {{--
+                        Asked where the order is. The action itself lives on the page and
+                        receives THIS order's id, so "cancel this one" needs no second step
+                        asking which. Hidden once Shopify says it is already cancelled.
+                    --}}
+                    @if (! empty($order['id']) && empty($order['cancelled_at']))
+                        <button
+                            type="button"
+                            class="mills-order__cancel"
+                            wire:click="mountAction('cancelOrder', { order_id: '{{ $order['id'] }}', order_name: @js($order['name'] ?? '') })"
+                            wire:loading.attr="disabled"
+                        >
+                            {{ __('subscriptions.cancel_order') }}
+                        </button>
+                    @endif
                 </div>
 
                 <ul class="mills-lines">
@@ -93,6 +109,23 @@
     .mills-order__name:hover { text-decoration: underline; }
     .mills-order__date { color: rgb(113 113 122 / 1); }
     .mills-order__total { margin-inline-start: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    /* Quiet until wanted: destructive, so it should not compete with the order's own numbers. */
+    .mills-order__cancel {
+        font-size: .75rem;
+        padding: .15rem .55rem;
+        border-radius: 6px;
+        border: 1px solid rgb(220 38 38 / .35);
+        color: rgb(185 28 28);
+        background: transparent;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background .15s ease, border-color .15s ease;
+    }
+
+    .mills-order__cancel:hover { background: rgb(220 38 38 / .08); border-color: rgb(220 38 38 / .6); }
+    .mills-order__cancel:disabled { opacity: .5; cursor: default; }
+    .dark .mills-order__cancel { color: rgb(252 165 165); border-color: rgb(252 165 165 / .35); }
     .mills-badge {
         font-size: .75rem; padding: .0625rem .5rem; border-radius: 9999px;
         background: rgb(244 244 245 / 1); color: rgb(63 63 70 / 1);

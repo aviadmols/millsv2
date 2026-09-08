@@ -3,13 +3,17 @@
 namespace App\Filament\Resources\Subscriptions\Pages;
 
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
+use App\Models\PaymentLedger;
 use App\Models\ProductVariant;
 use App\Models\Subscription;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\CardUpdateService;
+use App\Modules\MillsSubscriptions\Services\RefundService;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
+use App\Modules\MillsSubscriptions\Services\Shopify\OrderCancellationService;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
 use App\Modules\MillsSubscriptions\Services\SubscriptionActions;
 use App\Modules\MillsSubscriptions\Support\ChargePreview;
@@ -26,7 +30,9 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Utilities\Get;
@@ -411,6 +417,138 @@ class ViewSubscription extends ViewRecord
                 Notification::make()->title(__('subscriptions.charged_ok'))->success()->send();
                 $this->redirect(static::getResource()::getUrl('view', ['record' => $record]));
             });
+    }
+
+    /**
+     * Cancel one order from the history, and decide there and then whether to refund it.
+     *
+     * Mounted from the order card itself, with that order's id — the question "cancel this
+     * order?" is asked where the order is, not from a page header that would first have to
+     * ask which one.
+     *
+     * The two are separate decisions and the form says so. Cancelling stops a box going
+     * out; refunding returns money. A customer who cancels after the box arrived gets no
+     * refund. The refund runs FIRST and through PayMe, because that is where the money is —
+     * Shopify's own cancel can carry a refund and we never use it: asked for here it would
+     * be recorded and never paid, which is the whole reason this button exists.
+     */
+    public function cancelOrderAction(): Action
+    {
+        return Action::make('cancelOrder')
+            ->label(__('subscriptions.cancel_order'))
+            ->icon(Heroicon::OutlinedXCircle)
+            ->color('danger')
+            ->modalHeading(fn (array $arguments) => __('subscriptions.cancel_order_heading', [
+                'order' => $arguments['order_name'] ?? '',
+            ]))
+            ->modalDescription(__('subscriptions.cancel_order_help'))
+            ->modalSubmitActionLabel(__('subscriptions.cancel_order_submit'))
+            ->schema(function (array $arguments): array {
+                $ledger = self::ledgerForOrder((string) ($arguments['order_id'] ?? ''));
+                $refundable = $ledger !== null ? self::refundable($ledger) : 0.0;
+
+                return [
+                    Toggle::make('refund')
+                        ->label(__('subscriptions.cancel_order_refund'))
+                        ->helperText($refundable > 0
+                            ? __('subscriptions.cancel_order_refund_help', ['amount' => '₪'.number_format($refundable, 2)])
+                            : __('subscriptions.cancel_order_no_refundable'))
+                        // Off by default, and impossible when there is nothing to give back:
+                        // money leaving the business is never the quiet default.
+                        ->default(false)
+                        ->disabled($refundable <= 0)
+                        ->live(),
+
+                    TextInput::make('amount')
+                        ->label(__('ledgers.refund_amount'))
+                        ->numeric()
+                        ->prefix('₪')
+                        ->minValue(0.01)
+                        ->maxValue($refundable)
+                        ->default($refundable)
+                        ->visible(fn (Get $get) => (bool) $get('refund'))
+                        ->required(fn (Get $get) => (bool) $get('refund')),
+
+                    Toggle::make('restock')
+                        ->label(__('subscriptions.cancel_order_restock'))
+                        ->helperText(__('subscriptions.cancel_order_restock_help'))
+                        ->default(true),
+
+                    Textarea::make('reason')
+                        ->label(__('ledgers.refund_reason'))
+                        ->rows(2)
+                        ->maxLength(200),
+                ];
+            })
+            ->action(function (array $arguments, array $data): void {
+                $orderId = (string) ($arguments['order_id'] ?? '');
+                $reason = trim((string) ($data['reason'] ?? ''));
+
+                if ($orderId === '') {
+                    return;
+                }
+
+                // Money first. If the refund fails there is nothing to unwind — and
+                // cancelling anyway would leave a customer with no box and no money back.
+                if ($data['refund'] ?? false) {
+                    $ledger = self::ledgerForOrder($orderId);
+
+                    if ($ledger === null) {
+                        $this->fail(__('ledgers.refund_failed'), __('ledgers.refund_no_sale_id'));
+
+                        return;
+                    }
+
+                    try {
+                        app(RefundService::class)->refund(
+                            $ledger,
+                            (float) $data['amount'],
+                            Timeline::admin((int) auth()->id()),
+                            $reason,
+                        );
+                    } catch (Throwable $e) {
+                        $key = 'ledgers.'.$e->getMessage();
+                        $this->fail(__('ledgers.refund_failed'), __($key) === $key ? $e->getMessage() : __($key));
+
+                        return;
+                    }
+                }
+
+                try {
+                    app(OrderCancellationService::class)->cancel($orderId, (bool) ($data['restock'] ?? true), $reason);
+                } catch (Throwable $e) {
+                    $key = 'subscriptions.'.$e->getMessage();
+
+                    // The refund, if there was one, already happened and stands.
+                    $this->fail(__('subscriptions.cancel_order_failed'), __($key) === $key ? $e->getMessage() : __($key));
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__(($data['refund'] ?? false) ? 'subscriptions.cancel_order_done_refunded' : 'subscriptions.cancel_order_done'))
+                    ->success()
+                    ->persistent()
+                    ->send();
+
+                $this->redirect(static::getResource()::getUrl('view', ['record' => $this->record]));
+            });
+    }
+
+    /** The charge that paid for a Shopify order, if this system took it. */
+    private static function ledgerForOrder(string $orderId): ?PaymentLedger
+    {
+        return $orderId === '' ? null : PaymentLedger::query()
+            ->where('shopify_order_id', $orderId)
+            ->where('status', LedgerStatus::SUCCEEDED->value)
+            ->latest('id')
+            ->first();
+    }
+
+    /** What of that charge has not gone back yet. */
+    private static function refundable(PaymentLedger $ledger): float
+    {
+        return max(0.0, round((float) $ledger->amount - (float) ($ledger->refunded_amount ?? 0), 2));
     }
 
     /** Build (or rebuild) the upcoming order in Shopify — which also refreshes the amount. */
