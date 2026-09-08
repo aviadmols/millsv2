@@ -55,6 +55,13 @@
                 </div>
             @endif
 
+            @if (($preview['shipping_fee'] ?? 0) > 0)
+                <div class="mills-preview__row">
+                    <span>{{ $preview['shipping_title'] }}</span>
+                    <span class="mills-preview__num">{{ $money($preview['shipping_fee']) }}</span>
+                </div>
+            @endif
+
             <div class="mills-preview__row mills-preview__row--total">
                 <span>{{ __('subscriptions.preview_total') }}</span>
                 <span class="mills-preview__num">{{ $money($preview['total']) }}</span>

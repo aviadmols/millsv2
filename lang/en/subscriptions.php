@@ -177,6 +177,7 @@ return [
     'upcoming_needs_a_line' => 'An order needs at least one product',
     'edited_by_hand' => 'This upcoming order was edited by hand',
 
+    'shipping_title' => 'Delivery',
     'preview_heading' => 'What will actually be charged',
     'preview_subtotal' => 'Products (store price)',
     'preview_total' => 'To charge',

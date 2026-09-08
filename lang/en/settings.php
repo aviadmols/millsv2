@@ -41,6 +41,15 @@ return [
     'billing' => 'Billing',
     'billing_help' => 'When the recurring charges run each day.',
     'billing_hour' => 'Daily billing hour (Israel time)',
+    'shipping' => 'Delivery on the recurring charge',
+    'shipping_help' => 'One rule: a subscription order whose products (after discount) come to less than the threshold pays a delivery fee. At the threshold and above, delivery is free. Both at 0 = free delivery for everyone, as now.',
+    'shipping_fee' => 'Delivery fee',
+    'shipping_fee_help' => 'Added to an order below the threshold. 0 = never charge for delivery.',
+    'free_shipping_threshold' => 'Free-delivery threshold',
+    'free_shipping_threshold_help' => 'An order whose products (after the subscriber discount) come to at least this much pays no delivery. Measured on what the customer actually pays for the food.',
+    'shipping_title' => 'Delivery line name',
+    'shipping_title_help' => 'As the customer sees it on the order. Empty = "Delivery".',
+
     'subscription_discount' => 'Subscriber discount (%)',
     'subscription_discount_help' => 'The discount a new subscriber gets on recurring charges. 0 = the recurring order is billed at the store price, with no further discount. Applies to subscriptions created from now on — existing ones keep their deal, and each can be changed on its own screen.',
 

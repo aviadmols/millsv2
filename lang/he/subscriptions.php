@@ -177,6 +177,7 @@ return [
     'upcoming_needs_a_line' => 'הזמנה חייבת לכלול לפחות מוצר אחד',
     'edited_by_hand' => 'ההזמנה הבאה נערכה ידנית',
 
+    'shipping_title' => 'משלוח',
     'preview_heading' => 'מה ייגבה בפועל',
     'preview_subtotal' => 'סך המוצרים (מחיר החנות)',
     'preview_total' => 'לחיוב',

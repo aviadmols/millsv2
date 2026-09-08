@@ -5,6 +5,7 @@ namespace App\Modules\MillsSubscriptions\Services\Shopify;
 use App\Models\DiscountRule;
 use App\Models\Subscription;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Support\ChargePreview;
 use App\Modules\MillsSubscriptions\Support\DiscountResolver;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use App\Support\ShopifyId;
@@ -319,8 +320,25 @@ class DraftOrderService
             $input = $this->applyDiscount($input, $decision);
         }
 
-        // No shipping line: subscription delivery is free (D-shipping). The historical
-        // ₪29 "משלוח עד הבית" belongs to the old one-off checkout, not the recurring cycle.
+        /*
+         * Delivery. Free unless Settings says orders under a threshold pay a fee — and the
+         * decision is taken by ChargePreview, the same arithmetic the admin sees on screen,
+         * on what the customer pays for the food after the discount. The draft's total IS
+         * the amount charged, so putting the line here is what makes the customer pay it.
+         * Stated explicitly as null otherwise, for the same reason as the discount above:
+         * a rebuilt draft must describe the whole order, not inherit the last one's.
+         */
+        $preview = ChargePreview::for($subscription, array_map(
+            fn (array $item) => [
+                'variant_id' => ShopifyId::numeric((string) $item['variantId']),
+                'quantity' => (int) $item['quantity'],
+            ],
+            $lineItems,
+        ));
+
+        $input['shippingLine'] = $preview['shipping_fee'] > 0
+            ? ['title' => $preview['shipping_title'], 'price' => number_format($preview['shipping_fee'], 2, '.', '')]
+            : null;
 
         return $input;
     }

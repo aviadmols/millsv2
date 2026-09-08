@@ -79,6 +79,9 @@ class Settings extends Page implements HasForms
 
             'billing_hour' => (string) AppSetting::get('billing_hour', '9'),
             'subscription_discount_percent' => (string) AppSetting::get('subscription_discount_percent', '0'),
+            'shipping_fee' => (string) AppSetting::get('shipping_fee', '0'),
+            'free_shipping_threshold' => (string) AppSetting::get('free_shipping_threshold', '0'),
+            'shipping_title' => (string) AppSetting::get('shipping_title', ''),
         ]);
     }
 
@@ -147,6 +150,38 @@ class Settings extends Page implements HasForms
                             ->suffix('%')
                             ->required(),
                     ]),
+
+                /*
+                 * Delivery on the recurring cycle. Two numbers make one rule — "under X
+                 * pays Y" — and both at zero means what it always meant: free. Kept as its
+                 * own section so the rule reads as a sentence rather than two stray fields.
+                 */
+                Section::make(__('settings.shipping'))
+                    ->description(__('settings.shipping_help'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('shipping_fee')
+                            ->label(__('settings.shipping_fee'))
+                            ->helperText(__('settings.shipping_fee_help'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->prefix('₪')
+                            ->required(),
+
+                        TextInput::make('free_shipping_threshold')
+                            ->label(__('settings.free_shipping_threshold'))
+                            ->helperText(__('settings.free_shipping_threshold_help'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->prefix('₪')
+                            ->required(),
+
+                        TextInput::make('shipping_title')
+                            ->label(__('settings.shipping_title'))
+                            ->helperText(__('settings.shipping_title_help'))
+                            ->maxLength(60)
+                            ->columnSpanFull(),
+                    ]),
             ]);
     }
 
@@ -166,7 +201,7 @@ class Settings extends Page implements HasForms
             'from_address' => $d['from_address'] ?? null,
         ])->save();
 
-        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender', 'billing_hour', 'subscription_discount_percent'] as $key) {
+        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender', 'billing_hour', 'subscription_discount_percent', 'shipping_fee', 'free_shipping_threshold', 'shipping_title'] as $key) {
             AppSetting::put($key, $d[$key] ?? null);
         }
 

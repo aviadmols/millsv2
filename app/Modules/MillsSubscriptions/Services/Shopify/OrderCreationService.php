@@ -6,6 +6,7 @@ use App\Models\PaymentLedger;
 use App\Models\ProductVariant;
 use App\Models\Subscription;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Support\ChargePreview;
 use App\Modules\MillsSubscriptions\Support\DiscountResolver;
 use App\Support\ShopifyId;
 use Throwable;
@@ -258,7 +259,31 @@ class OrderCreationService
         }
 
         $subtotal = round($subtotal, 2);
-        $discount = round($subtotal - $paid, 2);
+
+        /*
+         * Delivery, decided by the same arithmetic that priced the draft. The draft carried
+         * the fee, so the amount charged includes it — and an order without the matching
+         * shipping line is underpaid by exactly that fee, back in "partially paid" by the
+         * other door. It also has to be known BEFORE the discount is worked out, because the
+         * gap between the lines and the money is (products + delivery) − paid, not
+         * products − paid.
+         */
+        $preview = ChargePreview::for($subscription, array_map(
+            fn (array $l) => ['variant_id' => (string) $l['variant_id'], 'quantity' => (int) $l['quantity']],
+            $lineItems,
+        ));
+
+        $shipping = round((float) $preview['shipping_fee'], 2);
+
+        if ($shipping > 0) {
+            $order['shipping_lines'] = [[
+                'title' => (string) $preview['shipping_title'],
+                'price' => number_format($shipping, 2, '.', ''),
+                'code' => 'mills-subscription-delivery',
+            ]];
+        }
+
+        $discount = round(($subtotal + $shipping) - $paid, 2);
 
         if ($discount <= 0) {
             // Charged the full price, or more than the lines come to. Nothing to explain —
@@ -267,6 +292,7 @@ class OrderCreationService
                 SystemLog::warning('billing', 'the charge exceeds the order total — order left for a human to look at', [
                     'charged' => $paid,
                     'line_items_total' => $subtotal,
+                    'shipping' => $shipping,
                     'ledger_id' => $ledger->id,
                 ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
             }

@@ -333,13 +333,20 @@ class SubscriptionScreenTest extends TestCase
         $this->assertSame(10.0, $input['lineItems'][0]['appliedDiscount']['value'] ?? null);
     }
 
-    public function test_the_upcoming_order_carries_no_shipping_line(): void
+    public function test_delivery_is_free_by_default_and_the_draft_says_so_explicitly(): void
     {
         [, $subscription] = $this->scenario();
 
-        // Subscription delivery is free — the historical ₪29 belongs to the old one-off
-        // checkout, not the recurring cycle.
-        $this->assertArrayNotHasKey('shippingLine', $this->draftInput($subscription));
+        /*
+         * No fee configured → free delivery, as it has always been. But the slot is stated
+         * as null rather than left out: draftOrderUpdate keeps whatever the input does not
+         * mention, and an omitted shipping line is how a fee once applied would survive
+         * every rebuild after the setting was switched off.
+         */
+        $input = $this->draftInput($subscription);
+
+        $this->assertArrayHasKey('shippingLine', $input);
+        $this->assertNull($input['shippingLine']);
     }
 
     /** @return array<string, mixed> */

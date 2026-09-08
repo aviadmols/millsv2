@@ -118,7 +118,14 @@ final class ChargePreview
             $discountAmount = round($base * $percent / 100, 2);
         }
 
-        $total = round($subtotal - $discountAmount, 2);
+        $products = round($subtotal - $discountAmount, 2);
+
+        // Delivery is decided on what the customer pays for the food, after the discount —
+        // and it is decided HERE, once, so the draft and the paid order cannot disagree.
+        $shipping = ShippingPolicy::feeFor($products);
+        $shippingFee = $shipping === null ? 0.0 : round($shipping['price'], 2);
+
+        $total = round($products + $shippingFee, 2);
         $stored = $subscription->next_charge_amount === null ? null : round((float) $subscription->next_charge_amount, 2);
 
         return [
@@ -130,6 +137,9 @@ final class ChargePreview
             'discount_percent' => $decision === null ? 0.0 : (float) $decision['percent'],
             'discount_amount' => $discountAmount,
             'discount_scope' => $decision['scope'] ?? null,
+            'products_total' => $products,
+            'shipping_title' => $shipping['title'] ?? null,
+            'shipping_fee' => $shippingFee,
             'total' => $total,
             'stored' => $stored,
             // A one-agora tolerance: the two are computed by different routes and must be
