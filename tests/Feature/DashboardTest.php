@@ -173,7 +173,10 @@ class DashboardTest extends TestCase
         // they have to be driven directly.
         Livewire::test(MillsStats::class)
             ->assertSee('₪153.90')
-            ->assertSee('1 charges');
+            // Through __(), not the English literal: the app runs in Hebrew, so a test that
+            // hard-codes the English wording passes only on a machine configured in English
+            // — which is how three of these went green here and red in CI.
+            ->assertSee(__('dashboard.charges_count', ['count' => 1]));
     }
 
     public function test_the_upcoming_card_shows_what_is_about_to_be_billed(): void
@@ -327,8 +330,8 @@ class DashboardTest extends TestCase
         $this->failedJob('sync');
 
         Livewire::test(SystemHealth::class)
-            ->assertSee('not charges')
-            ->assertDontSee('charges failed in the last 24 hours');
+            ->assertSee(__('dashboard.health_worker_failed_other', ['count' => 1]))
+            ->assertDontSee(__('dashboard.health_worker_failed', ['count' => 1]));
     }
 
     public function test_a_failed_charge_still_says_so(): void
@@ -337,6 +340,6 @@ class DashboardTest extends TestCase
         $this->failedJob('charges');
 
         Livewire::test(SystemHealth::class)
-            ->assertSee('charges failed in the last 24 hours');
+            ->assertSee(__('dashboard.health_worker_failed', ['count' => 1]));
     }
 }

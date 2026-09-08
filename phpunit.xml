@@ -19,6 +19,14 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!--
+            The locale the shop actually runs in. Without pinning it here the suite took
+            whatever each machine's .env happened to say: green locally on APP_LOCALE=en,
+            red in CI on the he of .env.example, for three tests that asserted English UI
+            strings. Tests should exercise what customers see, and identically everywhere.
+        -->
+        <env name="APP_LOCALE" value="he"/>
+        <env name="APP_FALLBACK_LOCALE" value="en"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
