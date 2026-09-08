@@ -6,10 +6,14 @@ use App\Domain\Billing\IdempotencyKey;
 use App\Models\PaymentLedger;
 use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Services\CardUpdateService;
+use App\Modules\MillsSubscriptions\Services\RefundService;
+use App\Modules\MillsSubscriptions\Support\Timeline;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -76,6 +80,7 @@ class PaymentLedgersTable
                 //
             ])
             ->recordActions([
+                self::refund(),
                 self::retryCardUpdate(),
                 EditAction::make(),
             ])
@@ -104,6 +109,83 @@ class PaymentLedgersTable
      * no new charge, no new SMS. On success the wall lifts exactly as if the callback had
      * worked; on refusal the row stays pending for the reconciler.
      */
+    /**
+     * Give the money back — through PayMe, where it actually is.
+     *
+     * Refunding in Shopify does nothing to the card: the charge never went through Shopify,
+     * and its refund on such an order is bookkeeping. An admin did exactly that on order
+     * 19019226579248 and the customer received nothing. This button is the real thing: PayMe
+     * returns the money, the ledger records it, and the Shopify order is marked to match.
+     *
+     * Offered only on a charge that succeeded and still has something left to return.
+     */
+    private static function refund(): Action
+    {
+        return Action::make('refund')
+            ->label(__('ledgers.refund'))
+            ->icon('heroicon-o-arrow-uturn-left')
+            ->color('danger')
+            ->visible(fn (PaymentLedger $record): bool => $record->status === LedgerStatus::SUCCEEDED
+                && in_array($record->context, IdempotencyKey::billingContexts(), true)
+                && filled($record->payme_transaction_id))
+            ->modalHeading(__('ledgers.refund_heading'))
+            ->modalDescription(fn (PaymentLedger $record) => __('ledgers.refund_help', [
+                'amount' => '₪'.number_format(self::remaining($record), 2),
+            ]))
+            ->modalSubmitActionLabel(__('ledgers.refund_submit'))
+            ->schema([
+                TextInput::make('amount')
+                    ->label(__('ledgers.refund_amount'))
+                    ->helperText(__('ledgers.refund_amount_help'))
+                    ->numeric()
+                    ->prefix('₪')
+                    ->minValue(0.01)
+                    ->maxValue(fn (PaymentLedger $record) => self::remaining($record))
+                    ->default(fn (PaymentLedger $record) => self::remaining($record))
+                    ->required(),
+
+                Textarea::make('reason')
+                    ->label(__('ledgers.refund_reason'))
+                    ->helperText(__('ledgers.refund_reason_help'))
+                    ->rows(2)
+                    ->maxLength(200),
+            ])
+            ->action(function (PaymentLedger $record, array $data): void {
+                try {
+                    $result = app(RefundService::class)->refund(
+                        $record,
+                        (float) $data['amount'],
+                        Timeline::admin((int) auth()->id()),
+                        trim((string) ($data['reason'] ?? '')),
+                    );
+
+                    Notification::make()
+                        ->title(__($result['full'] ? 'ledgers.refund_done' : 'ledgers.refund_done_part', [
+                            'amount' => '₪'.number_format($result['refunded'], 2),
+                        ]))
+                        ->success()
+                        ->persistent()
+                        ->send();
+                } catch (RuntimeException $e) {
+                    // The code is a translation key; anything else is PayMe's own words.
+                    $key = 'ledgers.'.$e->getMessage();
+
+                    Notification::make()
+                        ->title(__('ledgers.refund_failed'))
+                        ->body(__($key) === $key ? $e->getMessage() : __($key))
+                        ->danger()
+                        ->persistent()
+                        ->send();
+                }
+            });
+    }
+
+    /** What has not gone back yet: the charge less anything already refunded. */
+    private static function remaining(PaymentLedger $record): float
+    {
+        return max(0.0, round((float) $record->amount - (float) ($record->refunded_amount ?? 0), 2));
+    }
+
     private static function retryCardUpdate(): Action
     {
         return Action::make('retryCardUpdate')

@@ -22,9 +22,11 @@ class PaymentLedger extends Model
         return [
             'status' => LedgerStatus::class,
             'amount' => 'decimal:2',
+            'refunded_amount' => 'decimal:2',
             'raw_response_masked' => 'array',
             'meta' => 'array',
             'executed_at' => 'datetime',
+            'refunded_at' => 'datetime',
         ];
     }
 

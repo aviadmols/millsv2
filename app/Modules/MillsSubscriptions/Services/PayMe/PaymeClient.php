@@ -103,6 +103,33 @@ class PaymeClient
         ]);
     }
 
+    /**
+     * Return money to the card a sale was taken from.
+     *
+     * Refunding in Shopify does NOTHING to the customer's card: the recurring charge never
+     * went through Shopify, it went through here, and the order was only RECORDED there
+     * afterwards. Shopify's refund on such an order is bookkeeping. This is the call that
+     * actually moves the money back, against PayMe's own id for the sale.
+     *
+     * `agorot` null = the whole sale. A partial amount is stated in minor units, like every
+     * other amount this client sends, so a caller cannot refund ₪171.00 as 171 agorot.
+     *
+     * @return array<string, mixed>
+     */
+    public function refundSale(string $paymeSaleId, ?int $agorot = null): array
+    {
+        $request = [
+            'seller_payme_id' => $this->sellerId,
+            'payme_sale_id' => $paymeSaleId,
+        ];
+
+        if ($agorot !== null) {
+            $request['sale_refund_amount'] = $agorot;
+        }
+
+        return $this->post('/refund-sale', $request);
+    }
+
     /** @return array<string, mixed> */
     public function getBuyerKey(string $paymeSaleId): array
     {

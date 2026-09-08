@@ -18,6 +18,9 @@ final class Timeline
 
     public const KIND_CHARGE_FAILED = 'charge_failed';
 
+    /** Money went back to the card, through PayMe. details: {ledger_id, amount, full, reason}. */
+    public const KIND_CHARGE_REFUNDED = 'charge_refunded';
+
     public const KIND_CARD_UPDATED = 'card_updated';
 
     public const KIND_ADDRESS_UPDATED = 'address_updated';

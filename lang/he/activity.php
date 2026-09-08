@@ -18,6 +18,7 @@ return [
     'kind_subscription_created' => 'מנוי נוצר',
     'kind_charge_succeeded' => 'חיוב בוצע',
     'kind_charge_failed' => 'חיוב נכשל',
+    'kind_charge_refunded' => 'החזר ללקוח',
     'kind_order_created' => 'הזמנה נוצרה',
     'kind_card_updated' => 'כרטיס עודכן',
     'kind_status_changed' => 'סטטוס שונה',
@@ -41,6 +42,8 @@ return [
 
     'sum_charged' => 'חויב :amount',
     'sum_charge_failed' => 'נכשל — :reason',
+    'sum_refunded' => ':amount הוחזרו ללקוח דרך PayMe',
+    'sum_refunded_part' => ':amount הוחזרו ללקוח דרך PayMe (החזר חלקי)',
     'sum_card_updated' => 'נשמר כרטיס חדש · :count מנויים שוחררו לחיוב',
     'sum_recovered' => 'שוחזר אוטומטית',
     'sum_quiz' => 'השאלון הפך לכלב: :dog (:weight ק"ג)',

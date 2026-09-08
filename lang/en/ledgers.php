@@ -21,4 +21,22 @@ return [
     'executed_at' => 'Executed',
     'created_at' => 'Created',
     'updated_at' => 'Updated',
+
+    'refund' => 'Refund',
+    'refund_heading' => 'Refund the customer',
+    'refund_help' => 'The refund is issued in PayMe — where the money actually is. A refund in Shopify alone returns nothing to the customer. Left to refund on this charge: :amount. The ledger is updated and the Shopify order marked refunded to match.',
+    'refund_submit' => 'Refund through PayMe',
+    'refund_amount' => 'Amount to refund',
+    'refund_amount_help' => 'Defaults to everything still outstanding. Lower it for a partial refund.',
+    'refund_reason' => 'Reason (optional)',
+    'refund_reason_help' => 'Shown on the subscription timeline and in the refund note on the Shopify order.',
+    'refund_done' => ':amount returned to the customer. Issued in PayMe, recorded in the ledger, marked in Shopify.',
+    'refund_done_part' => ':amount returned to the customer (partial). The remainder can still be refunded.',
+    'refund_failed' => 'The refund was not issued',
+
+    'refund_not_succeeded' => 'Only a charge that succeeded can be refunded. A pending or failed charge took nothing, and a refunded one has already gone back.',
+    'refund_not_a_charge' => 'This row is not a subscription charge (a card verification, for instance) — there is nothing to refund.',
+    'refund_no_sale_id' => 'This row carries no PayMe sale id, so PayMe cannot be told what to refund. Issue the refund directly in the PayMe dashboard.',
+    'refund_amount_out_of_range' => 'The amount must be between one agora and what is still outstanding.',
+    'refund_payme_refused' => 'PayMe refused the refund. The details are in the system log — check there, and if needed issue it by hand in the PayMe dashboard.',
 ];

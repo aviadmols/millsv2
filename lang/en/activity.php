@@ -18,6 +18,7 @@ return [
     'kind_subscription_created' => 'Subscription created',
     'kind_charge_succeeded' => 'Charged',
     'kind_charge_failed' => 'Charge failed',
+    'kind_charge_refunded' => 'Refund',
     'kind_order_created' => 'Order created',
     'kind_card_updated' => 'Card updated',
     'kind_status_changed' => 'Status changed',
@@ -41,6 +42,8 @@ return [
 
     'sum_charged' => 'Charged :amount',
     'sum_charge_failed' => 'Failed — :reason',
+    'sum_refunded' => ':amount returned to the customer through PayMe',
+    'sum_refunded_part' => ':amount returned to the customer through PayMe (partial refund)',
     'sum_card_updated' => 'A new card was saved · :count subscription(s) unblocked',
     'sum_recovered' => 'recovered automatically',
     'sum_quiz' => 'The quiz became a dog: :dog (:weight kg)',

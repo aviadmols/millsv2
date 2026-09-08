@@ -26,6 +26,9 @@ final class EventPresenter
         Timeline::KIND_QUIZ_LINKED => ['info', 'activity.kind_quiz_linked'],
         Timeline::KIND_CHARGE_SUCCEEDED => ['success', 'activity.kind_charge_succeeded'],
         Timeline::KIND_CHARGE_FAILED => ['failure', 'activity.kind_charge_failed'],
+        // WARNING: money leaving the business is never routine, and it should not read
+        // like a successful charge in the scan.
+        Timeline::KIND_CHARGE_REFUNDED => ['warning', 'activity.kind_charge_refunded'],
         Timeline::KIND_ORDER_CREATED => ['success', 'activity.kind_order_created'],
         // WARNING, not success: a card update is the event support is looking for when a
         // customer says "I paid and nothing happened". It has to stand out in the scan.
@@ -50,6 +53,7 @@ final class EventPresenter
         'source', 'dogs', 'shopify_order_id', 'order', 'payment_state', 'fields',
         'note', 'actor', 'mode',
         'frequency_from', 'frequency_to', 'charge_date_from', 'charge_date_to',
+        'full',
     ];
 
     public static function tone(ActivityEvent $event): string
@@ -128,6 +132,9 @@ final class EventPresenter
             Timeline::KIND_CHARGE_FAILED => __('activity.sum_charge_failed', [
                 'reason' => (string) ($d['failure_code'] ?? $d['status'] ?? '—'),
             ]),
+            Timeline::KIND_CHARGE_REFUNDED => __(($d['full'] ?? true) ? 'activity.sum_refunded' : 'activity.sum_refunded_part', [
+                'amount' => '₪'.number_format((float) ($d['amount'] ?? 0), 2),
+            ]).(trim((string) ($d['reason'] ?? '')) !== '' ? ' — '.trim((string) $d['reason']) : ''),
             Timeline::KIND_CARD_UPDATED => __('activity.sum_card_updated', [
                 'count' => (int) ($d['subscriptions_unblocked'] ?? 0),
             ]).(($d['recovered_by_reconciliation'] ?? false) ? ' · '.__('activity.sum_recovered') : ''),
