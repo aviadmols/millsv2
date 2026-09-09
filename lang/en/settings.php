@@ -41,6 +41,11 @@ return [
     'billing' => 'Billing',
     'billing_help' => 'When the recurring charges run each day.',
     'billing_hour' => 'Daily billing hour (Israel time)',
+    'vat_rate' => 'VAT rate',
+    'vat_rate_help' => 'Shopify does not work out tax for orders created through the API — it records exactly what it is sent, and without this the order carries 0% and the invoice prints it that way. Store prices include VAT, so this is the tax already inside them. 0 = record no tax at all.',
+    'vat_title' => 'VAT line name',
+    'vat_title_help' => 'As it appears on the order and the invoice. Empty = "VAT".',
+
     'order_gateway_label' => 'Payment method name on orders',
     'order_gateway_label_help' => 'What Shopify shows as the payment method on orders this system creates (e.g. "PayMe"). Empty = "manual". A label only: the money moves through PayMe and Shopify merely records it, so a refund issued in Shopify returns nothing to the customer whatever this says. The real refund is "Refund" on the payment ledger.',
 

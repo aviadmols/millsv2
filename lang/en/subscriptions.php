@@ -192,6 +192,7 @@ return [
     'cancel_not_connected' => 'Shopify is not connected — an order cannot be cancelled right now.',
     'cancel_refused' => 'Shopify refused to cancel the order. Usually this means it has already been fulfilled — a shipped order cannot be cancelled, only refunded. Details are in the system log.',
 
+    'vat' => 'VAT',
     'shipping_title' => 'Delivery',
     'preview_heading' => 'What will actually be charged',
     'preview_subtotal' => 'Products (store price)',

@@ -83,6 +83,8 @@ class Settings extends Page implements HasForms
             'free_shipping_threshold' => (string) AppSetting::get('free_shipping_threshold', '0'),
             'shipping_title' => (string) AppSetting::get('shipping_title', ''),
             'order_gateway_label' => (string) AppSetting::get('order_gateway_label', ''),
+            'vat_rate' => (string) AppSetting::get('vat_rate', '18'),
+            'vat_title' => (string) AppSetting::get('vat_title', ''),
         ]);
     }
 
@@ -157,6 +159,26 @@ class Settings extends Page implements HasForms
                             ->placeholder('PayMe')
                             ->maxLength(40)
                             ->columnSpanFull(),
+
+                        /*
+                         * Shopify does not work tax out for an order created through the
+                         * API. Given none, the order says zero — and the invoicing app
+                         * printed exactly that (invoice 134216, food at 0%, delivery exempt).
+                         */
+                        TextInput::make('vat_rate')
+                            ->label(__('settings.vat_rate'))
+                            ->helperText(__('settings.vat_rate_help'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(100)
+                            ->suffix('%')
+                            ->required(),
+
+                        TextInput::make('vat_title')
+                            ->label(__('settings.vat_title'))
+                            ->helperText(__('settings.vat_title_help'))
+                            ->placeholder(__('subscriptions.vat'))
+                            ->maxLength(40),
                     ]),
 
                 /*
@@ -209,7 +231,7 @@ class Settings extends Page implements HasForms
             'from_address' => $d['from_address'] ?? null,
         ])->save();
 
-        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender', 'billing_hour', 'subscription_discount_percent', 'shipping_fee', 'free_shipping_threshold', 'shipping_title', 'order_gateway_label'] as $key) {
+        foreach (['payme_api_url', 'payme_seller_id', 'payme_hosted_fields_api_key', 'sms_019_username', 'sms_019_token', 'sms_019_sender', 'billing_hour', 'subscription_discount_percent', 'shipping_fee', 'free_shipping_threshold', 'shipping_title', 'order_gateway_label', 'vat_rate', 'vat_title'] as $key) {
             AppSetting::put($key, $d[$key] ?? null);
         }
 

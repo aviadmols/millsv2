@@ -79,6 +79,11 @@ class OrderCreationService
             // partially paid and it sits in the admin looking like an unpaid debt.
             $order = $this->reconcileToAmountPaid($order, $lineItems, $subscription, $ledger);
 
+            // After reconciliation, so the tax is worked out on the prices and delivery the
+            // order actually carries — and outside it, so an order that took an early exit
+            // there (nothing to discount, a variant we could not price) is still taxed.
+            $order = $this->applyVat($order, round((float) $ledger->amount, 2));
+
             if (! empty($subscription->customer?->shopify_customer_id)) {
                 $order['customer'] = ['id' => (int) $subscription->customer->shopify_customer_id];
             }
@@ -323,6 +328,90 @@ class OrderCreationService
             'amount' => number_format($discount, 2, '.', ''),
             'type' => 'fixed_amount',
         ]];
+
+        return $order;
+    }
+
+    /**
+     * State the VAT the prices already contain.
+     *
+     * Shopify does NOT work tax out for an order created through the API — its tax engine
+     * runs at checkout, and an order posted here carries exactly the tax it is given. Given
+     * none, the order says zero, and everything downstream believes it: invoice 134216
+     * printed the food at "+0% מע״מ", the delivery as "פטור ממע״מ", and then found the only
+     * line it thought taxable was the DISCOUNT — so it billed 18% of that, arriving at
+     * minus ₪2.75 of VAT and a total ₪2.75 short of what the customer actually paid.
+     *
+     * Store prices include VAT, so `taxes_included` is true and each line's tax is the
+     * portion already inside it: price × rate / (100 + rate). The order-level discount is
+     * spread across the lines in proportion first, so the tax is worked out on what was
+     * really paid for each line — and the last line absorbs the rounding, so the tax lines
+     * add up to exactly the VAT inside the amount charged rather than a fraction more.
+     *
+     * @param  array<string, mixed>  $order
+     * @return array<string, mixed>
+     */
+    private function applyVat(array $order, float $paid): array
+    {
+        $rate = round((float) AppSetting::get('vat_rate', '18'), 2);
+
+        if ($rate <= 0) {
+            return $order;   // a shop that does not charge VAT says nothing about it
+        }
+
+        // Every taxable component, keyed so the tax can be written back where it came from.
+        $components = [];
+
+        foreach ($order['line_items'] ?? [] as $i => $line) {
+            $gross = round((float) ($line['price'] ?? 0) * (int) ($line['quantity'] ?? 1), 2);
+
+            if ($gross > 0) {
+                $components[] = ['path' => ['line_items', $i], 'gross' => $gross];
+            }
+        }
+
+        foreach ($order['shipping_lines'] ?? [] as $i => $line) {
+            $gross = round((float) ($line['price'] ?? 0), 2);
+
+            if ($gross > 0) {
+                $components[] = ['path' => ['shipping_lines', $i], 'gross' => $gross];
+            }
+        }
+
+        $grossTotal = round(array_sum(array_column($components, 'gross')), 2);
+
+        if ($components === [] || $grossTotal <= 0 || $paid <= 0) {
+            return $order;
+        }
+
+        // The VAT actually inside the money taken. Every line's share must add up to this.
+        $vatTotal = round($paid * $rate / (100 + $rate), 2);
+        $title = trim((string) AppSetting::get('vat_title', '')) ?: __('subscriptions.vat');
+
+        $allocated = 0.0;
+        $last = count($components) - 1;
+
+        foreach ($components as $index => $component) {
+            $vat = $index === $last
+                // The remainder, so a repeating third of an agora cannot make the tax lines
+                // disagree with the total by a rounding error nobody can explain.
+                ? round($vatTotal - $allocated, 2)
+                : round($vatTotal * ($component['gross'] / $grossTotal), 2);
+
+            $allocated = round($allocated + $vat, 2);
+
+            [$group, $i] = $component['path'];
+
+            $order[$group][$i]['tax_lines'] = [[
+                'title' => $title,
+                'rate' => $rate / 100,
+                'price' => number_format($vat, 2, '.', ''),
+            ]];
+        }
+
+        // The prices we send already contain the tax stated above — without this Shopify
+        // reads them as net and adds the VAT on top, overcharging every customer.
+        $order['taxes_included'] = true;
 
         return $order;
     }
