@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Subscriptions\Schemas;
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Models\ActivityEvent;
 use App\Models\Dog;
+use App\Models\PaymentLedger;
 use App\Models\PaymentMethod;
 use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
@@ -177,6 +178,11 @@ class SubscriptionInfolist
         ];
     }
 
+    private static function orderIsMissing(mixed $record): bool
+    {
+        return $record instanceof PaymentLedger && $record->isMissingOrder();
+    }
+
     private static function card(Subscription $subscription): ?PaymentMethod
     {
         return $subscription->customer?->activePaymentMethod();
@@ -319,11 +325,29 @@ class SubscriptionInfolist
                                 }),
                             TextEntry::make('shopify_order_id')
                                 ->label(__('subscriptions.created_order'))
+                                // A paid charge with no order is a customer who will receive
+                                // nothing. It used to render as a quiet "—", identical to a
+                                // charge that was never meant to have one (subscription 321).
+                                ->state(fn ($record) => $record->shopify_order_id
+                                    ?: (self::orderIsMissing($record) ? __('ledgers.order_missing') : null))
                                 ->placeholder('—')
-                                ->formatStateUsing(fn ($state) => $state ? __('subscriptions.view_in_shopify') : '—')
-                                ->url(fn ($state) => OrderHistoryService::adminUrl('orders', (string) $state))
-                                ->openUrlInNewTab()
-                                ->color(fn ($state) => $state ? 'primary' : 'gray'),
+                                ->formatStateUsing(fn ($state, $record) => $record->shopify_order_id
+                                    ? __('subscriptions.view_in_shopify')
+                                    : $state)
+                                ->badge(fn ($record) => self::orderIsMissing($record))
+                                ->color(fn ($record) => match (true) {
+                                    (bool) $record->shopify_order_id => 'primary',
+                                    self::orderIsMissing($record) => 'danger',
+                                    default => 'gray',
+                                })
+                                // The reason, in Shopify's own words where Shopify gave one.
+                                ->helperText(fn ($record) => self::orderIsMissing($record)
+                                    ? ($record->order_error ?: __('ledgers.order_error_unrecorded'))
+                                    : null)
+                                ->url(fn ($record) => $record->shopify_order_id
+                                    ? OrderHistoryService::adminUrl('orders', (string) $record->shopify_order_id)
+                                    : null)
+                                ->openUrlInNewTab(),
                         ]),
                 ]),
 

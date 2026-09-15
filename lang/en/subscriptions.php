@@ -193,6 +193,7 @@ return [
     'cancel_refused' => 'Shopify refused to cancel the order. Usually this means it has already been fulfilled — a shipped order cannot be cancelled, only refunded. Details are in the system log.',
 
     'vat' => 'VAT',
+    'shopify_refused_unknown' => 'Shopify refused without giving a reason. Full details are in the system log.',
     'shipping_title' => 'Delivery',
     'preview_heading' => 'What will actually be charged',
     'preview_subtotal' => 'Products (store price)',

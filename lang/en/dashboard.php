@@ -98,6 +98,9 @@ return [
     'health_last_run' => 'Last run',
     'health_no_runs' => 'No run has ever been recorded — the scheduler is not running.',
 
+    'missing_orders_heading' => 'Charged, with no order created',
+    'missing_orders_description' => 'These customers paid, but the Shopify order was never created — so nothing will be shipped to them. The money was not refunded and will not be taken again. Beside each one is the reason, as Shopify put it. Fix the reason, then create the order.',
+
     'cardcom_heading' => 'Waiting for iCount removal',
     'cardcom_description' => 'These customers saved a card and are now billed by us — but their old recurring charge in iCount must be removed BY HAND, and until it is they are being billed twice. Confirm each one only after removing it in iCount.',
     'cardcom_confirm' => 'Removed from iCount',

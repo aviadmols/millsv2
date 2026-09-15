@@ -7,6 +7,7 @@ use App\Models\Subscription;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Support\ChargePreview;
 use App\Modules\MillsSubscriptions\Support\DiscountResolver;
+use App\Modules\MillsSubscriptions\Support\ShopifyErrors;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use App\Support\ShopifyId;
 use RuntimeException;
@@ -444,7 +445,10 @@ class DraftOrderService
         if (! empty($errors)) {
             SystemLog::error('shopify', "{$mutation} failed", ['errors' => $errors]);
 
-            throw new RuntimeException('shopify_draft_order_failed');
+            // Shopify's own words, not a code. The screen used to say only
+            // "shopify_draft_order_failed" while the reason sat in the log table — an admin
+            // cannot fix "failed", but can fix the field Shopify named (subscription 324).
+            throw new RuntimeException(ShopifyErrors::describe($errors));
         }
 
         return $result['data'][$mutation]['draftOrder'] ?? [];

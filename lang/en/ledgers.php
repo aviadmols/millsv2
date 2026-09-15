@@ -22,6 +22,11 @@ return [
     'created_at' => 'Created',
     'updated_at' => 'Updated',
 
+    'order_missing' => 'No order created',
+    'order_error_unrecorded' => 'The reason was not recorded (this charge predates reason tracking). See the system log under "Shopify refused the paid order".',
+    'order_error_not_connected' => 'Shopify was disconnected at the moment of the charge.',
+    'order_error_no_products' => 'The subscription had no products at the moment of the charge — nothing to put on an order.',
+
     'refund' => 'Refund',
     'refund_heading' => 'Refund the customer',
     'refund_help' => 'The refund is issued in PayMe — where the money actually is. A refund in Shopify alone returns nothing to the customer. Left to refund on this charge: :amount. The ledger is updated and the Shopify order marked refunded to match.',

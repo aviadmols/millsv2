@@ -9,6 +9,7 @@ use App\Models\Subscription;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Support\ChargePreview;
 use App\Modules\MillsSubscriptions\Support\DiscountResolver;
+use App\Modules\MillsSubscriptions\Support\ShopifyErrors;
 use App\Support\ShopifyId;
 use Throwable;
 
@@ -43,7 +44,7 @@ class OrderCreationService
                 'ledger_id' => $ledger->id,
             ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
 
-            return null;
+            return $this->recordFailure($ledger, __('ledgers.order_error_not_connected'));
         }
 
         $lineItems = $this->lineItems($subscription);
@@ -53,7 +54,7 @@ class OrderCreationService
                 'ledger_id' => $ledger->id,
             ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
 
-            return null;
+            return $this->recordFailure($ledger, __('ledgers.order_error_no_products'));
         }
 
         try {
@@ -106,10 +107,18 @@ class OrderCreationService
                     'response' => $response['errors'] ?? $response,
                 ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
 
-                return null;
+                // Shopify's own words — "shipping_address: country is not valid" is a thing
+                // an admin can fix; "refused" is not.
+                return $this->recordFailure($ledger, ShopifyErrors::describe($response['errors'] ?? $response));
             }
 
-            $ledger->forceFill(['shopify_order_id' => $orderId])->save();
+            // Success clears any earlier failure: a retried order that finally went through
+            // must stop being reported as missing.
+            $ledger->forceFill([
+                'shopify_order_id' => $orderId,
+                'order_error' => null,
+                'order_attempted_at' => now(),
+            ])->save();
 
             SystemLog::info('billing', 'Shopify order created for the charge', [
                 'order_id' => $orderId,
@@ -126,8 +135,33 @@ class OrderCreationService
                 'message' => $e->getMessage(),
             ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
 
-            return null;
+            return $this->recordFailure($ledger, $e->getMessage());
         }
+    }
+
+    /**
+     * Write down, on the charge itself, why it has no order.
+     *
+     * The system log already had it; the screens did not. The billing history showed a
+     * silent "—" and nothing flagged the customer who had paid and would receive nothing
+     * (subscription 321: charged ₪414, no order, noticed four days later). On the charge,
+     * the reason is where both the billing history and the home screen can read it.
+     *
+     * Never throws: this runs on the failure path of a charge that has already succeeded,
+     * and being unable to record the failure must not become a second one.
+     */
+    private function recordFailure(PaymentLedger $ledger, string $reason): ?string
+    {
+        try {
+            $ledger->forceFill([
+                'order_error' => mb_substr(trim($reason) !== '' ? trim($reason) : __('subscriptions.shopify_refused_unknown'), 0, 1000),
+                'order_attempted_at' => now(),
+            ])->save();
+        } catch (Throwable) {
+            // The system log line above is the record of last resort.
+        }
+
+        return null;
     }
 
     /**
