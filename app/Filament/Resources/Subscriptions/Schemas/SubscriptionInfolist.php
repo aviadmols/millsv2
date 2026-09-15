@@ -183,6 +183,11 @@ class SubscriptionInfolist
         return $record instanceof PaymentLedger && $record->isMissingOrder();
     }
 
+    private static function orderResolvedByHand(mixed $record): bool
+    {
+        return $record instanceof PaymentLedger && $record->isOrderResolvedByHand();
+    }
+
     private static function card(Subscription $subscription): ?PaymentMethod
     {
         return $subscription->customer?->activePaymentMethod();
@@ -329,21 +334,29 @@ class SubscriptionInfolist
                                 // nothing. It used to render as a quiet "—", identical to a
                                 // charge that was never meant to have one (subscription 321).
                                 ->state(fn ($record) => $record->shopify_order_id
-                                    ?: (self::orderIsMissing($record) ? __('ledgers.order_missing') : null))
+                                    ?: match (true) {
+                                        self::orderIsMissing($record) => __('ledgers.order_missing'),
+                                        self::orderResolvedByHand($record) => __('ledgers.order_resolved'),
+                                        default => null,
+                                    })
                                 ->placeholder('—')
                                 ->formatStateUsing(fn ($state, $record) => $record->shopify_order_id
                                     ? __('subscriptions.view_in_shopify')
                                     : $state)
-                                ->badge(fn ($record) => self::orderIsMissing($record))
+                                ->badge(fn ($record) => self::orderIsMissing($record) || self::orderResolvedByHand($record))
                                 ->color(fn ($record) => match (true) {
                                     (bool) $record->shopify_order_id => 'primary',
                                     self::orderIsMissing($record) => 'danger',
                                     default => 'gray',
                                 })
-                                // The reason, in Shopify's own words where Shopify gave one.
-                                ->helperText(fn ($record) => self::orderIsMissing($record)
-                                    ? ($record->order_error ?: __('ledgers.order_error_unrecorded'))
-                                    : null)
+                                // The reason, in Shopify's own words where Shopify gave one —
+                                // or, once an admin dealt with it, how and when.
+                                ->helperText(fn ($record) => match (true) {
+                                    self::orderIsMissing($record) => $record->order_error ?: __('ledgers.order_error_unrecorded'),
+                                    self::orderResolvedByHand($record) => $record->order_resolved_note
+                                        ?: __('ledgers.order_resolved_on', ['date' => $record->order_resolved_at->format('d.m.Y')]),
+                                    default => null,
+                                })
                                 ->url(fn ($record) => $record->shopify_order_id
                                     ? OrderHistoryService::adminUrl('orders', (string) $record->shopify_order_id)
                                     : null)

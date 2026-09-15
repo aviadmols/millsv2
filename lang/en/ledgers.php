@@ -26,6 +26,8 @@ return [
     'order_error_unrecorded' => 'The reason was not recorded (this charge predates reason tracking). See the system log under "Shopify refused the paid order".',
     'order_error_not_connected' => 'Shopify was disconnected at the moment of the charge.',
     'order_error_no_products' => 'The subscription had no products at the moment of the charge — nothing to put on an order.',
+    'order_resolved' => 'Handled by hand',
+    'order_resolved_on' => 'Marked resolved on :date',
 
     'refund' => 'Refund',
     'refund_heading' => 'Refund the customer',

@@ -26,6 +26,8 @@ return [
     'order_error_unrecorded' => 'הסיבה לא נרשמה (החיוב קדם לרישום הסיבות). הפרטים ביומן המערכת תחת "Shopify refused the paid order".',
     'order_error_not_connected' => 'החיבור לשופיפיי היה מנותק ברגע החיוב.',
     'order_error_no_products' => 'למנוי לא היו מוצרים ברגע החיוב — אין מה לשים בהזמנה.',
+    'order_resolved' => 'טופל ידנית',
+    'order_resolved_on' => 'סומן כמטופל ב-:date',
 
     'refund' => 'החזר ללקוח',
     'refund_heading' => 'החזר כספי ללקוח',

@@ -9,7 +9,7 @@
     <x-slot name="description">{{ __('dashboard.missing_orders_description') }}</x-slot>
 
     <div class="mills-missing">
-        @foreach ($this->getMissing() as $ledger)
+        @forelse ($this->getMissing() as $ledger)
             @php $customer = $ledger->subscription?->customer; @endphp
 
             <div class="mills-missing__row" wire:key="missing-order-{{ $ledger->id }}">
@@ -30,14 +30,23 @@
                     {{ $ledger->order_error ?: __('ledgers.order_error_unrecorded') }}
                 </div>
 
-                @if ($url = $this->subscriptionUrl($ledger))
-                    <x-filament::button tag="a" :href="$url" color="gray" size="sm" icon="heroicon-o-arrow-top-right-on-square">
-                        {{ __('dashboard.open') }}
-                    </x-filament::button>
-                @endif
+                <div class="mills-missing__actions">
+                    @if ($url = $this->subscriptionUrl($ledger))
+                        <x-filament::button tag="a" :href="$url" color="gray" size="sm" icon="heroicon-o-arrow-top-right-on-square">
+                            {{ __('dashboard.open') }}
+                        </x-filament::button>
+                    @endif
+
+                    {{ ($this->markResolvedAction)(['ledger' => $ledger->id]) }}
+                </div>
             </div>
-        @endforeach
+        @empty
+            {{-- The last one was just resolved; the whole alert goes on the next page load. --}}
+            <div class="mills-missing__done">{{ __('dashboard.missing_orders_all_resolved') }}</div>
+        @endforelse
     </div>
+
+    <x-filament-actions::modals />
 
     <style>
         .mills-missing { display: grid; gap: .5rem; }
@@ -68,6 +77,9 @@
         }
 
         .dark .mills-missing__reason { color: rgb(252 165 165); }
+
+        .mills-missing__actions { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
+        .mills-missing__done { font-size: .85rem; opacity: .7; }
 
         @media (max-width: 720px) {
             .mills-missing__row { grid-template-columns: 1fr; gap: .4rem; }

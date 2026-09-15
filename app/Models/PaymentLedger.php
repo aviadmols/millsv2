@@ -30,6 +30,7 @@ class PaymentLedger extends Model
             'executed_at' => 'datetime',
             'refunded_at' => 'datetime',
             'order_attempted_at' => 'datetime',
+            'order_resolved_at' => 'datetime',
         ];
     }
 
@@ -58,7 +59,8 @@ class PaymentLedger extends Model
      * can never disagree about who is waiting for a box that is not coming. Only a real
      * subscription charge that succeeded counts — a card verification or a v1 import never
      * had an order to create — and a charge minutes old is still creating its order, so it
-     * is given a grace period before it is called missing.
+     * is given a grace period before it is called missing. One an admin has marked as dealt
+     * with is not missing any more — it is handled, see isOrderResolvedByHand().
      */
     public function isMissingOrder(): bool
     {
@@ -67,6 +69,7 @@ class PaymentLedger extends Model
         return $status === LedgerStatus::SUCCEEDED
             && in_array($this->context, IdempotencyKey::billingContexts(), true)
             && blank($this->shopify_order_id)
+            && $this->order_resolved_at === null
             && ($this->executed_at === null || $this->executed_at->lt(now()->subMinutes(self::ORDER_GRACE_MINUTES)));
     }
 
@@ -82,8 +85,52 @@ class PaymentLedger extends Model
             ->where('status', LedgerStatus::SUCCEEDED->value)
             ->whereIn('context', IdempotencyKey::billingContexts())
             ->where(fn (Builder $q) => $q->whereNull('shopify_order_id')->orWhere('shopify_order_id', ''))
+            ->whereNull('order_resolved_at')
             ->where(fn (Builder $q) => $q->whereNull('executed_at')
                 ->orWhere('executed_at', '<', now()->subMinutes(self::ORDER_GRACE_MINUTES)));
+    }
+
+    /** Paid, no order from the system — and an admin has marked it as dealt with. */
+    public function isOrderResolvedByHand(): bool
+    {
+        return blank($this->shopify_order_id) && $this->order_resolved_at !== null;
+    }
+
+    /**
+     * Close the "paid, no order" alert for this charge.
+     *
+     * Only the order bookkeeping is touched — never status or amount; the money that moved
+     * stays exactly as recorded. When the admin created the order by hand and says which one,
+     * it is linked, so the billing history points at the real order like any other charge.
+     */
+    public function resolveMissingOrder(string $actor, ?string $shopifyOrderId = null, string $note = ''): void
+    {
+        $this->forceFill(array_filter([
+            'order_resolved_at' => now(),
+            'order_resolved_by' => $actor,
+            'order_resolved_note' => $note !== '' ? $note : null,
+            'shopify_order_id' => $shopifyOrderId ?: null,
+        ], fn ($value) => $value !== null))->save();
+    }
+
+    /**
+     * The numeric Shopify order id in whatever the admin pasted: the order page's address
+     * (…/orders/19030456926512) or the id itself. An order NAME such as "#74500" is not an
+     * id — Shopify cannot be addressed by it — so it is refused rather than stored.
+     */
+    public static function shopifyOrderIdFrom(?string $input): ?string
+    {
+        $input = trim((string) $input);
+
+        if ($input === '') {
+            return null;
+        }
+
+        if (preg_match('~/orders/(\d{6,})~', $input, $m) || preg_match('~^(?:gid://shopify/Order/)?(\d{10,})$~', $input, $m)) {
+            return $m[1];
+        }
+
+        return null;
     }
 
     /** Long enough for an order to be created after its charge; short enough to matter. */

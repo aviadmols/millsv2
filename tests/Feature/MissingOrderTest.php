@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Widgets\MissingOrders;
+use App\Models\ActivityEvent;
 use App\Models\Customer;
 use App\Models\Dog;
 use App\Models\PaymentLedger;
@@ -17,6 +18,7 @@ use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Services\Shopify\OrderCreationService;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use App\Modules\MillsSubscriptions\Support\ShopifyErrors;
+use App\Modules\MillsSubscriptions\Support\Timeline;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Mockery;
@@ -243,7 +245,8 @@ class MissingOrderTest extends TestCase
         Livewire::test(MissingOrders::class)
             ->assertSee(__('dashboard.missing_orders_heading'))
             ->assertSee('shipping_address: country is not valid')
-            ->assertSee('₪414.00');
+            ->assertSee('₪414.00')
+            ->assertSee(__('dashboard.missing_orders_resolve'));
     }
 
     public function test_a_charge_from_before_reasons_were_recorded_still_appears(): void
@@ -255,6 +258,75 @@ class MissingOrderTest extends TestCase
 
         Livewire::test(MissingOrders::class)
             ->assertSee(__('ledgers.order_error_unrecorded'));
+    }
+
+    // --- once it is dealt with, it leaves ---------------------------------------
+
+    public function test_resolving_takes_the_customer_off_the_alert_and_leaves_the_money_alone(): void
+    {
+        $admin = User::factory()->create();
+        $this->actingAs($admin);
+        $ledger = $this->charge();
+
+        Livewire::test(MissingOrders::class)
+            ->callAction('markResolved', data: ['note' => 'נוצרה הזמנה ידנית'], arguments: ['ledger' => $ledger->id])
+            ->assertHasNoActionErrors()
+            ->assertSee(__('dashboard.missing_orders_all_resolved'));
+
+        $ledger = $ledger->fresh();
+        $this->assertFalse($ledger->isMissingOrder());
+        $this->assertTrue($ledger->isOrderResolvedByHand());
+        $this->assertSame('נוצרה הזמנה ידנית', $ledger->order_resolved_note);
+        $this->assertSame(Timeline::admin($admin->id), $ledger->order_resolved_by);
+        $this->assertFalse(MissingOrders::canView());
+
+        // The charge is exactly what it was — resolving is bookkeeping, not money.
+        $this->assertSame(LedgerStatus::SUCCEEDED, $ledger->status);
+        $this->assertSame('414.00', (string) $ledger->amount);
+
+        // And it is on the subscription's history, with who did it.
+        $event = ActivityEvent::query()->where('kind', Timeline::KIND_ADMIN_NOTE)->sole();
+        $this->assertSame($ledger->subscription_id, $event->subscription_id);
+        $this->assertSame(Timeline::admin($admin->id), $event->actor);
+        $this->assertStringContainsString('נוצרה הזמנה ידנית', $event->details['note']);
+    }
+
+    public function test_the_order_created_by_hand_is_linked_from_its_shopify_address(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $ledger = $this->charge();
+
+        Livewire::test(MissingOrders::class)
+            ->callAction('markResolved', data: [
+                'order' => 'https://admin.shopify.com/store/millsforpets/orders/19030456926512',
+            ], arguments: ['ledger' => $ledger->id])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame('19030456926512', $ledger->fresh()->shopify_order_id);
+    }
+
+    public function test_an_order_number_is_refused_because_shopify_cannot_be_addressed_by_it(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $ledger = $this->charge();
+
+        Livewire::test(MissingOrders::class)
+            ->callAction('markResolved', data: ['order' => '#74500'], arguments: ['ledger' => $ledger->id])
+            ->assertHasActionErrors(['order']);
+
+        // Nothing written: the customer is still on the alert.
+        $this->assertTrue($ledger->fresh()->isMissingOrder());
+    }
+
+    public function test_the_shopify_order_id_is_read_from_what_an_admin_would_paste(): void
+    {
+        $this->assertSame('19030456926512', PaymentLedger::shopifyOrderIdFrom('https://admin.shopify.com/store/millsforpets/orders/19030456926512'));
+        $this->assertSame('19030456926512', PaymentLedger::shopifyOrderIdFrom('https://admin.shopify.com/store/millsforpets/orders/19030456926512?tab=x'));
+        $this->assertSame('19030456926512', PaymentLedger::shopifyOrderIdFrom(' 19030456926512 '));
+        $this->assertSame('19030456926512', PaymentLedger::shopifyOrderIdFrom('gid://shopify/Order/19030456926512'));
+        $this->assertNull(PaymentLedger::shopifyOrderIdFrom('#74500'));
+        $this->assertNull(PaymentLedger::shopifyOrderIdFrom('74500'));
+        $this->assertNull(PaymentLedger::shopifyOrderIdFrom(''));
     }
 
     public function test_the_alert_is_absent_when_nobody_is_missing_an_order(): void
