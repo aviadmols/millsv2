@@ -118,6 +118,46 @@ class MissingOrderTest extends TestCase
         }
     }
 
+    public function test_rebuilding_over_a_draft_that_no_longer_exists_creates_a_fresh_one(): void
+    {
+        // Subscription 324: its stored draft had already been completed/deleted in Shopify,
+        // so the delete step of the rebuild answered "Draft order not found" — and that
+        // reached the screen instead of the new draft being built. A draft that is gone is
+        // exactly the case the rebuild exists for.
+        $ledger = $this->withProduct($this->charge());
+        $subscription = $ledger->subscription;
+        $subscription->forceFill(['draft_order_id' => '1111'])->save();
+
+        $client = Mockery::mock(ShopifyAdminClient::class);
+        $client->shouldReceive('isConnected')->andReturnTrue();
+        $client->shouldReceive('graphql')
+            ->withArgs(fn (string $query) => str_contains($query, 'draftOrderDelete'))
+            ->once()
+            ->andReturn(['data' => ['draftOrderDelete' => [
+                'deletedId' => null,
+                'userErrors' => [['field' => ['id'], 'message' => 'Draft order not found']],
+            ]]]);
+        $client->shouldReceive('graphql')
+            ->withArgs(fn (string $query) => str_contains($query, 'draftOrderCreate'))
+            ->once()
+            ->andReturn(['data' => ['draftOrderCreate' => [
+                'draftOrder' => [
+                    'id' => 'gid://shopify/DraftOrder/2222',
+                    'name' => '#D2',
+                    'status' => 'OPEN',
+                    'totalPriceSet' => ['shopMoney' => ['amount' => '414.00', 'currencyCode' => 'ILS']],
+                    'subtotalPriceSet' => ['shopMoney' => ['amount' => '414.00', 'currencyCode' => 'ILS']],
+                    'lineItems' => ['nodes' => []],
+                ],
+                'userErrors' => [],
+            ]]]);
+
+        $draft = (new DraftOrderService($client))->refresh($subscription);
+
+        $this->assertSame('2222', (string) $draft['id']);
+        $this->assertSame('2222', (string) $subscription->fresh()->draft_order_id);
+    }
+
     // --- the reason is kept on the charge -------------------------------------
 
     public function test_a_refused_order_writes_shopifys_reason_onto_the_charge(): void

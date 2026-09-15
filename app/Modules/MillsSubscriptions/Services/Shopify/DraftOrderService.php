@@ -11,6 +11,7 @@ use App\Modules\MillsSubscriptions\Support\ShopifyErrors;
 use App\Modules\MillsSubscriptions\Support\VariantResolver;
 use App\Support\ShopifyId;
 use RuntimeException;
+use Throwable;
 
 /**
  * The "upcoming order" — one OPEN Shopify draft order per active subscription, showing
