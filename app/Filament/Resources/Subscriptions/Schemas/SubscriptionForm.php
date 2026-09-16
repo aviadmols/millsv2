@@ -77,6 +77,7 @@ class SubscriptionForm
                             ->label(__('subscriptions.payment'))
                             ->options(fn () => collect(PaymentState::cases())
                                 ->mapWithKeys(fn ($c) => [$c->value => __('subscriptions.pay_'.$c->value)])->all())
+                            ->helperText(__('subscriptions.payment_state_help'))
                             ->required(),
                         Select::make('frequency_months')
                             ->label(__('subscriptions.frequency'))

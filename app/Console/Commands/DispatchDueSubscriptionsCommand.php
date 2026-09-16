@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\NoChargeCycleAdvancer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 
@@ -109,8 +110,24 @@ class DispatchDueSubscriptionsCommand extends Command
                 }
             });
 
+        /*
+         * No-charge subscriptions move to their next cycle here, BEHIND the same two gates
+         * as the charges: when billing is switched off nothing cycles, and a date moves at
+         * the billing hour rather than at 00:05. Two subscribers on the same day, one paying
+         * and one not, keep the same rhythm.
+         *
+         * The query above selects `payme` by name, so a no-charge subscription can never
+         * reach a charge job — and this touches only no-charge rows, so neither path can
+         * move the other's date.
+         */
+        $advanced = app(NoChargeCycleAdvancer::class)->advanceDue($cutoff);
+
         Cache::forever('billing.dispatch.last_run', now()->toIso8601String());
         $this->info("Dispatched {$dispatched} charge job(s).");
+
+        if ($advanced > 0) {
+            $this->info("Moved {$advanced} no-charge subscription(s) to their next cycle.");
+        }
 
         if ($heldBack > 0) {
             $this->warn("{$heldBack} subscription(s) held back — too far behind to charge automatically.");
@@ -119,6 +136,7 @@ class DispatchDueSubscriptionsCommand extends Command
         SystemLog::info('cron', "billing dispatch ran — {$dispatched} charge(s) queued", [
             'dispatched' => $dispatched,
             'held_back' => $heldBack,
+            'no_charge_advanced' => $advanced,
             'cutoff' => $cutoff->toIso8601String(),
         ]);
 

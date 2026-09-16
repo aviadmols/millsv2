@@ -55,6 +55,7 @@ return [
     'sum_payment_state' => 'Payment state: :state',
     'reason_self_service' => 'done by the customer in their account area',
     'reason_missed_cycles_skipped' => 'moved forward after a card update — the customer was not billed for missed cycles',
+    'reason_no_charge_cycle' => 'no-charge subscription moved to its next cycle — nothing was charged',
     'sum_fields_changed' => 'The customer updated: :fields',
     'field_subscription_status' => 'subscription status',
     'field_frequency' => 'delivery frequency',

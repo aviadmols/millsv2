@@ -115,7 +115,12 @@ refunded        → (terminal)
 
 **PaymentState** (per subscription): `payme` (billable) | `needs_card_update` (iCount wall —
 billing skips; `/me` reports `requires_card_update:true`; billing-affecting writes return 403
-`icount_requires_card_update` exactly as v1).
+`icount_requires_card_update` exactly as v1) | `no_charge` (admin-entered without a card, on
+purpose: cycles advance on schedule via `NoChargeCycleAdvancer`, and nothing is ever charged —
+no ledger row, no Shopify order, no document. `/me` reports it as an ordinary subscription,
+`integration_source:payme`, `requires_card_update:false`, so the frozen storefront contract is
+unchanged. A saved card does NOT lift it to `payme`; only an admin does).
+Only `payme` is billable — the dispatcher selects it by name and the orchestrator refuses the rest.
 
 ## 4. Idempotency keys (deterministic, via IdempotencyKey class only)
 
@@ -152,7 +157,9 @@ ledger row disappear with no other code change.
 
 - `mills:dispatch-due` every 5 min (scheduler service): `status=active AND payment_state=payme
   AND next_charge_at <= now()` — **window select with automatic catch-up** (no single-minute
-  gate, no cache toggle). Chunked; one ChargeJob per subscription.
+  gate, no cache toggle). Chunked; one ChargeJob per subscription. The same run, behind the
+  same kill-switch and billing-hour gates, moves every due `no_charge` subscription to its next
+  cycle (one `plan_updated` timeline row each; no job, no ledger, no order).
 - ChargeOrchestrator order: lock → succeeded-precheck → payment-method precheck (fail closed →
   `needs_card_update` + event) → `Ledger::open(pending)` → PayMe charge → transition ledger →
   **[success side effects, each compensating, never unwinding money truth]:**

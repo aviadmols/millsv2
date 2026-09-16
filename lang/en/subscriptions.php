@@ -19,6 +19,8 @@ return [
 
     'pay_payme' => 'PayMe',
     'pay_needs_card_update' => 'Needs card update',
+    'pay_no_charge' => 'No charge',
+    'payment_state_help' => 'PayMe: charged on every cycle. Needs card update: nothing is charged until the customer enters a card. No charge: a regular subscription whose cycles move forward on schedule — nothing is ever charged, no order, invoice or receipt is created, and saving a card does not start billing. To start charging, switch it to PayMe here.',
 
     'monthly' => 'Monthly',
     'every_2_months' => 'Every 2 months',
@@ -124,6 +126,7 @@ return [
     'charged_ok' => 'Charged, and the order was created',
     'charge_failed' => 'The charge failed',
     'charge_status_needs_card_update' => 'The payment method needs updating.',
+    'charge_status_no_charge' => 'This is a no-charge subscription — it is never charged. To charge it, switch its payment to PayMe first.',
     'charge_status_not_active' => 'The subscription is not active.',
     'charge_status_no_amount' => 'The charge amount is unknown.',
     'charge_status_already_charged' => 'This has already been charged today.',

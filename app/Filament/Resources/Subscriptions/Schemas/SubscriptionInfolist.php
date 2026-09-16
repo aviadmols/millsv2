@@ -114,7 +114,13 @@ class SubscriptionInfolist
                         ->label(__('subscriptions.payment'))
                         ->badge()
                         ->formatStateUsing(fn (PaymentState $state) => __('subscriptions.pay_'.$state->value))
-                        ->color(fn (PaymentState $state) => $state === PaymentState::PAYME ? 'success' : 'warning'),
+                        // Gray, not warning: no-charge is a choice somebody made, not a problem
+                        // waiting for a card.
+                        ->color(fn (PaymentState $state) => match ($state) {
+                            PaymentState::PAYME => 'success',
+                            PaymentState::NEEDS_CARD_UPDATE => 'warning',
+                            PaymentState::NO_CHARGE => 'gray',
+                        }),
                     TextEntry::make('frequency_months')
                         ->label(__('subscriptions.frequency'))
                         ->formatStateUsing(fn (int $state) => $state === 2 ? __('subscriptions.every_2_months') : __('subscriptions.monthly')),
@@ -161,8 +167,11 @@ class SubscriptionInfolist
                         ->badge()
                         ->color('danger')
                         ->state(__('subscriptions.card_update_required'))
-                        ->visible(fn (Subscription $record) => self::card($record) === null
-                            || $record->payment_state === PaymentState::NEEDS_CARD_UPDATE),
+                        // A no-charge subscription has no card BY DESIGN — a red "card update
+                        // required" on it would send someone chasing a customer for nothing.
+                        ->visible(fn (Subscription $record) => $record->payment_state !== PaymentState::NO_CHARGE
+                            && (self::card($record) === null
+                                || $record->payment_state === PaymentState::NEEDS_CARD_UPDATE)),
 
                     TextEntry::make('card_masked')
                         ->label(__('subscriptions.card'))

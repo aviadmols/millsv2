@@ -50,6 +50,13 @@ class ChargeOrchestrator
                 return [null, ['success' => false, 'status' => 'not_active']];
             }
 
+            // Asked before the generic refusal: "the payment method needs updating" is the
+            // wrong thing to tell an admin about a subscription that was never meant to be
+            // charged, and the wrong thing to act on.
+            if ($locked->payment_state === PaymentState::NO_CHARGE) {
+                return [null, ['success' => false, 'status' => 'no_charge']];
+            }
+
             if ($locked->payment_state !== PaymentState::PAYME) {
                 return [null, ['success' => false, 'status' => 'needs_card_update']];
             }

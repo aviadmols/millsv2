@@ -19,6 +19,8 @@ return [
 
     'pay_payme' => 'PayMe',
     'pay_needs_card_update' => 'דרוש עדכון כרטיס',
+    'pay_no_charge' => 'ללא חיוב',
+    'payment_state_help' => 'PayMe: חיוב בכל מחזור. דרוש עדכון כרטיס: אין חיוב עד שהלקוח מכניס כרטיס. ללא חיוב: מנוי רגיל שהמחזורים שלו מתקדמים לפי התאריכים — אין חיוב, לא נוצרת הזמנה, חשבונית או קבלה, ושמירת כרטיס לא מתחילה חיוב. כדי להתחיל לחייב, העבר כאן ל-PayMe.',
 
     'monthly' => 'חודשי',
     'every_2_months' => 'כל חודשיים',
@@ -124,6 +126,7 @@ return [
     'charged_ok' => 'החיוב בוצע והזמנה נוצרה',
     'charge_failed' => 'החיוב נכשל',
     'charge_status_needs_card_update' => 'דרוש עדכון אמצעי תשלום.',
+    'charge_status_no_charge' => 'זהו מנוי ללא חיוב — הוא לא מחויב אף פעם. כדי לחייב אותו, העבר קודם את התשלום ל-PayMe.',
     'charge_status_not_active' => 'המנוי אינו פעיל.',
     'charge_status_no_amount' => 'לא ידוע סכום החיוב.',
     'charge_status_already_charged' => 'החיוב כבר בוצע היום.',

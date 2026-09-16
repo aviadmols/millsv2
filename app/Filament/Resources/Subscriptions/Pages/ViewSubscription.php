@@ -413,7 +413,10 @@ class ViewSubscription extends ViewRecord
                 ])
                 : __('subscriptions.action_charge_now_no_amount'))
             ->modalSubmitActionLabel(__('subscriptions.action_charge_now_submit'))
-            ->visible(fn (Subscription $record) => $record->status === SubscriptionStatus::ACTIVE)
+            // Not offered on a no-charge subscription: the orchestrator would refuse it, and a
+            // button that can only fail is a question the admin should not have to ask.
+            ->visible(fn (Subscription $record) => $record->status === SubscriptionStatus::ACTIVE
+                && $record->payment_state !== PaymentState::NO_CHARGE)
             // No amount → no charge. The button is dead rather than guessing a number.
             ->disabled(fn (Subscription $record) => empty($record->next_charge_amount))
             ->action(function (Subscription $record) {

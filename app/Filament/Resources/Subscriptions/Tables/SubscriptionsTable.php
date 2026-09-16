@@ -48,7 +48,11 @@ class SubscriptionsTable
                     ->label(__('subscriptions.payment'))
                     ->badge()
                     ->formatStateUsing(fn (PaymentState $state) => __('subscriptions.pay_'.$state->value))
-                    ->color(fn (PaymentState $state) => $state === PaymentState::PAYME ? 'success' : 'warning'),
+                    ->color(fn (PaymentState $state) => match ($state) {
+                        PaymentState::PAYME => 'success',
+                        PaymentState::NEEDS_CARD_UPDATE => 'warning',
+                        PaymentState::NO_CHARGE => 'gray',
+                    }),
 
                 TextColumn::make('frequency_months')
                     ->label(__('subscriptions.frequency'))
