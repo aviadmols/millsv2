@@ -63,30 +63,46 @@ class ViewSubscription extends ViewRecord
     public ?array $cardUpdateSession = null;
 
     /**
-     * Nine buttons in one row ran off the edge of the screen — "Charge now", the most
-     * dangerous one, was the half that fell off. The three an admin actually reaches for stay
-     * out front; the rest live behind a menu, where a destructive action is harder to hit by
-     * accident and nothing is hidden off-screen.
+     * ONE button out front; everything else one click behind it.
+     *
+     * Nine buttons in a row ran off the edge of the screen and "Charge now" — the one that
+     * takes money and cannot be undone — was the half that fell off. Editing the upcoming
+     * order is the reason this screen gets opened, so it stays a button. Every other action
+     * lives in the menu, where a row of destructive buttons cannot be hit by accident and
+     * the header stays the same width whatever the subscription's state allows.
+     *
+     * The menu is FLAT on purpose. Filament draws a divider between nested groups, and it
+     * draws that divider even when every action in the group is hidden — on a cancelled
+     * subscription all six billing actions are hidden, so grouping would leave a stray line
+     * above an empty gap. Splitting them would also mean restating each action's visibility
+     * rule here, where it could drift from the action's own.
      */
     protected function getHeaderActions(): array
     {
         return [
             $this->editUpcomingOrderAction(),
-            $this->updateCardAction(),
-            $this->chargeNowAction(),
 
             ActionGroup::make([
+                // The money, and the card it moves on.
+                $this->updateCardAction(),
+                $this->chargeNowAction(),
+                // The subscription's own rhythm.
                 $this->pauseAction(),
                 $this->resumeAction(),
                 $this->postponeAction(),
                 $this->buildDraftAction(),
+                // Leaving this screen.
                 $this->customerPortalAction(),
                 EditAction::make(),
             ])
                 ->label(__('subscriptions.more_actions'))
                 ->icon(Heroicon::OutlinedEllipsisHorizontal)
                 ->button()
-                ->color('gray'),
+                ->color('gray')
+                // The panel is capped at 14rem by default, which cut "View the customer's
+                // personal area" down to "View the customer's pe…". A menu that hides half of
+                // its longest label is hinting at an option, not offering it.
+                ->dropdownWidth(Width::ExtraSmall),
         ];
     }
 

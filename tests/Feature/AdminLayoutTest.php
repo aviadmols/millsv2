@@ -135,9 +135,26 @@ class AdminLayoutTest extends TestCase
             ->getContent();
 
         // Nine buttons in one row ran off the right of the window, and "Charge now" — the one
-        // that takes money and cannot be undone — was the half that fell off. The rest live in
-        // a menu now, so it must still be here, in the row.
-        $this->assertStringContainsString(__('subscriptions.action_charge_now'), $html);
+        // that takes money and cannot be undone — was the half that fell off. The header is one
+        // button and a menu now, so the row can no longer overflow whatever the subscription's
+        // state allows; what must not happen is an action going MISSING on the way in.
+        $this->assertStringContainsString(__('subscriptions.action_edit_upcoming'), $html);
         $this->assertStringContainsString(__('subscriptions.more_actions'), $html);
+
+        foreach ([
+            'action_charge_now',
+            'action_update_card',
+            'action_pause',
+            'action_postpone',
+            'action_build_draft',
+            // NOT the customer portal: it is visible only for a customer with a Shopify id on a
+            // store with a configured storefront URL, and this fixture is neither.
+        ] as $key) {
+            $this->assertStringContainsString(
+                __("subscriptions.{$key}"),
+                $html,
+                "subscriptions.{$key} is not on the page — the menu dropped an action",
+            );
+        }
     }
 }
