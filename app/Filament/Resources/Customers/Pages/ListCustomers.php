@@ -189,6 +189,8 @@ class ListCustomers extends ListRecords
                 // One number can hold several accounts; every one of them is brought in, so
                 // support is never left wondering which of the three they got.
                 $imported = 0;
+                $withSubscription = 0;
+                $reasons = [];
                 $lastCustomerId = null;
 
                 foreach ($matches as $match) {
@@ -198,6 +200,12 @@ class ListCustomers extends ListRecords
                         $imported++;
                         $lastCustomerId = $result['customer_id'];
                     }
+
+                    if ($result['subscription_id'] !== null || $result['status'] === LegacyCustomerImporter::STATUS_ALREADY_HAS_SUBSCRIPTION) {
+                        $withSubscription++;
+                    } elseif (filled($result['reason'] ?? null)) {
+                        $reasons[] = (string) $result['reason'];
+                    }
                 }
 
                 if ($imported === 0) {
@@ -206,11 +214,26 @@ class ListCustomers extends ListRecords
                     return;
                 }
 
-                Notification::make()
-                    ->title(__('customers.push_done', ['count' => $imported]))
-                    ->body(__('customers.push_done_help'))
-                    ->success()
-                    ->send();
+                /*
+                 * A customer whose subscription did NOT come with them is not a success. The
+                 * old wording ("2 customers added") read identically either way, so a signup
+                 * the old system was still writing looked like a completed import and nobody
+                 * knew to press the button again.
+                 */
+                if ($withSubscription === 0) {
+                    Notification::make()
+                        ->title(__('customers.push_done_no_subscription', ['count' => $imported]))
+                        ->body(implode(' · ', array_unique($reasons)).' '.__('customers.push_retry_help'))
+                        ->warning()
+                        ->persistent()
+                        ->send();
+                } else {
+                    Notification::make()
+                        ->title(__('customers.push_done', ['count' => $imported]))
+                        ->body(__('customers.push_done_help'))
+                        ->success()
+                        ->send();
+                }
 
                 if ($imported === 1 && $lastCustomerId !== null) {
                     $this->redirect(CustomerResource::getUrl('edit', ['record' => $lastCustomerId]));
@@ -290,7 +313,10 @@ class ListCustomers extends ListRecords
 
         Notification::make()
             ->title(__('customers.import_'.$status))
+            // What the note actually said, so "no subscription" is a next step and not a wall.
+            ->body($result['reason'] ?? null)
             ->{$imported ? 'success' : 'warning'}()
+            ->persistent()
             ->send();
 
         if ($imported && $result['subscription_id'] !== null) {

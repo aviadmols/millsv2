@@ -20,6 +20,9 @@ jobs:
           php-version: '8.4'
           extensions: mbstring, pdo, pdo_sqlite, bcmath, intl
           coverage: none
+          # The whole suite runs in one process and renders full admin pages; PHP's 128M
+          # default now runs out partway through, and the run dies mid-test.
+          ini-values: memory_limit=-1
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress

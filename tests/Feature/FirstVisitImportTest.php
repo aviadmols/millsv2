@@ -43,7 +43,7 @@ class FirstVisitImportTest extends TestCase
                 return array_values($this->customers);
             }
 
-            public function find(string $idOrGid): array
+            public function find(string $idOrGid, bool $fresh = false): array
             {
                 return $this->customers[(string) $idOrGid] ?? [];
             }

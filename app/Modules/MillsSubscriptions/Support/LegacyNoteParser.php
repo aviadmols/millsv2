@@ -30,6 +30,13 @@ use Throwable;
  */
 class LegacyNoteParser
 {
+    /**
+     * iCount historically wrote "account-active"; later exports write plain "active". Both are
+     * the same thing, and rejecting the second would silently drop real customers. Anything
+     * else — "new-onboarding" above all — is a signup the old system has not finished writing.
+     */
+    public const ACTIVE_STATUSES = ['account-active', 'active'];
+
     /** @return array<string, mixed>|null */
     public static function decode(string $note): ?array
     {
@@ -63,11 +70,9 @@ class LegacyNoteParser
             return null;
         }
 
-        // iCount historically wrote "account-active"; later exports write plain "active".
-        // Both are the same thing, and rejecting the second would silently drop real customers.
         $status = strtolower(trim((string) ($legacy['status'] ?? '')));
 
-        if ($status !== 'account-active' && $status !== 'active') {
+        if (! in_array($status, self::ACTIVE_STATUSES, true)) {
             return null;
         }
 
@@ -88,6 +93,45 @@ class LegacyNoteParser
             // this number on the order — so dropping it here is not cosmetic.
             'discount_percent' => self::discountPercent($legacy['discount'] ?? null),
             'dogs' => $dogs,
+        ];
+    }
+
+    /**
+     * What the note says, when it did NOT produce a subscription.
+     *
+     * The old system writes this field in stages while a customer signs up — for a couple of
+     * minutes it holds a half-finished signup ("new-onboarding"), and an import in that window
+     * brings the customer across with nothing attached. "No active subscription" is true but
+     * useless to whoever pressed the button; the status is the part they can act on.
+     *
+     * @return array{has_note: bool, parsable: bool, status: ?string, active: bool,
+     *               dogs: int, shippable_dogs: int}
+     */
+    public static function explain(string $note): array
+    {
+        $legacy = self::decode($note);
+
+        if ($legacy === null) {
+            return [
+                'has_note' => trim($note) !== '',
+                'parsable' => false,
+                'status' => null,
+                'active' => false,
+                'dogs' => 0,
+                'shippable_dogs' => 0,
+            ];
+        }
+
+        $status = strtolower(trim((string) ($legacy['status'] ?? '')));
+        $dogs = is_array($legacy['dogs'] ?? null) ? $legacy['dogs'] : [];
+
+        return [
+            'has_note' => true,
+            'parsable' => true,
+            'status' => $status !== '' ? $status : null,
+            'active' => in_array($status, self::ACTIVE_STATUSES, true),
+            'dogs' => count($dogs),
+            'shippable_dogs' => count(self::parseDogs($legacy)),
         ];
     }
 

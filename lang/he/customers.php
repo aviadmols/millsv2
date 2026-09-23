@@ -22,6 +22,15 @@ return [
     'phone' => 'מספר טלפון',
     'phone_help' => 'כל פורמט עובד: 050-123-4567, 0501234567 או 972501234567+.',
     'push_done' => 'נוספו :count לקוחות',
+    'push_done_no_subscription' => 'נוספו :count לקוחות — אבל בלי מנוי',
+    'push_retry_help' => 'הלקוח נמצא במערכת, רק בלי מנוי. אם הוא סיים בינתיים הרשמה במערכת הישנה — לחץ שוב על "משיכת לקוח לפי טלפון" והמנוי ייובא.',
+
+    // Why a customer arrived without their subscription — the note's own words.
+    'note_reason_empty' => 'ב-NOTE של הלקוח בשופיפיי אין כלום.',
+    'note_reason_unreadable' => 'ה-NOTE של הלקוח בשופיפיי אינו קריא (לא JSON תקין).',
+    'note_reason_status' => 'המנוי ב-NOTE במצב ":status" ולא "active" — המערכת הישנה עדיין באמצע ההרשמה, או שהמנוי אינו פעיל.',
+    'note_reason_no_dogs' => 'ב-NOTE אין אף כלב, ולכן אין מה לשלוח.',
+    'note_reason_no_products' => 'לכלבים ב-NOTE אין מוצרים פעילים, ולכן אין מה לשלוח.',
     'push_done_help' => 'אפשר לפתוח אותם עכשיו באדמין, והם יתבקשו לעדכן כרטיס לפני כל שינוי במנוי.',
     'push_not_found' => 'לא נמצא לקוח בשופיפיי עם המספר הזה',
     'push_not_found_help' => 'אין בחנות התאמה ל-:phone — ייתכן שהוא שמור שם תחת מספר אחר, או רק על הזמנה ולא על הלקוח.',

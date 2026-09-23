@@ -22,6 +22,15 @@ return [
     'phone' => 'Phone number',
     'phone_help' => 'Any format works: 050-123-4567, 0501234567 or +972501234567.',
     'push_done' => ':count customer(s) added',
+    'push_done_no_subscription' => ':count customer(s) added — but with no subscription',
+    'push_retry_help' => 'The customer is in the system, only without a subscription. If they have since finished signing up in the old system, press "Push customer by phone" again and the subscription is imported.',
+
+    // Why a customer arrived without their subscription — the note's own words.
+    'note_reason_empty' => "The customer's note in Shopify is empty.",
+    'note_reason_unreadable' => "The customer's note in Shopify cannot be read (not valid JSON).",
+    'note_reason_status' => 'The subscription in the note is ":status", not "active" — the old system is still mid-signup, or the subscription is not active.',
+    'note_reason_no_dogs' => 'The note holds no dog, so there is nothing to ship.',
+    'note_reason_no_products' => 'The dogs in the note have no active products, so there is nothing to ship.',
     'push_done_help' => 'They can now be opened in the admin, and they will be asked to update their card before any change to the subscription.',
     'push_not_found' => 'No Shopify customer with that number',
     'push_not_found_help' => 'Nothing in the store matches :phone — it may be saved there under a different number, or only on an order rather than on the customer.',

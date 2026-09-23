@@ -2,17 +2,22 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\Customers\Pages\ListCustomers;
 use App\Models\Customer;
 use App\Models\Dog;
 use App\Models\Subscription;
+use App\Models\User;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\CardUpdateService;
 use App\Modules\MillsSubscriptions\Services\LegacyCustomerImporter;
+use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyAdminClient;
 use App\Modules\MillsSubscriptions\Services\Shopify\ShopifyCustomerService;
 use App\Modules\MillsSubscriptions\Support\CustomerMapper;
 use App\Modules\MillsSubscriptions\Support\LegacyNoteParser;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
+use Mockery;
 use Tests\TestCase;
 
 /**
@@ -47,7 +52,7 @@ class LegacyNoteImportTest extends TestCase
                 return [$this->find($this->id)];
             }
 
-            public function find(string $idOrGid): array
+            public function find(string $idOrGid, bool $fresh = false): array
             {
                 return [
                     'id' => $this->id,
@@ -179,6 +184,113 @@ class LegacyNoteImportTest extends TestCase
         $this->assertSame(LegacyCustomerImporter::STATUS_NO_NOTE, $result['status']);
         $this->assertSame(1, Customer::query()->count());
         $this->assertSame(0, Subscription::query()->count());
+    }
+
+    /**
+     * The old system writes the note in stages while someone signs up, and for a minute or
+     * two it holds a half-finished signup. An import in that window brings the customer over
+     * with nothing attached — which is correct, but it used to be reported as a plain success
+     * ("1 customer added"), so nobody knew to try again (customer 7397221925168, 2026-09-23).
+     */
+    public function test_a_signup_the_old_system_is_still_writing_says_so_and_imports_on_retry(): void
+    {
+        $midSignup = str_replace('"status":"account-active"', '"status":"new-onboarding"', self::NOTE);
+        $this->fakeShopify($midSignup);
+
+        $result = app(LegacyCustomerImporter::class)->import('900123');
+
+        $this->assertSame(LegacyCustomerImporter::STATUS_NO_NOTE, $result['status']);
+        $this->assertSame(0, Subscription::query()->count());
+
+        // The status the note actually holds is named, because that is the part an admin
+        // can act on — "no active subscription" alone reads as a dead end.
+        $this->assertStringContainsString('new-onboarding', (string) $result['reason']);
+
+        // And once the old system finishes, pressing the button again brings it in: the
+        // customer is already here, so the second run must not refuse them as a duplicate.
+        $this->fakeShopify(self::NOTE);
+
+        $retry = app(LegacyCustomerImporter::class)->import('900123');
+
+        $this->assertSame(LegacyCustomerImporter::STATUS_IMPORTED, $retry['status']);
+        $this->assertSame(1, Customer::query()->count());
+        $this->assertSame(1, Subscription::query()->count());
+        $this->assertSame(1, Dog::query()->count());
+    }
+
+    public function test_the_phone_module_does_not_call_a_customer_without_a_subscription_a_success(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $this->fakeShopify(str_replace('"status":"account-active"', '"status":"new-onboarding"', self::NOTE));
+
+        $client = Mockery::mock(ShopifyAdminClient::class);
+        $client->shouldReceive('isConnected')->andReturnTrue();
+        $this->app->instance(ShopifyAdminClient::class, $client);
+
+        Livewire::test(ListCustomers::class)
+            ->callAction('pushByPhone', data: ['phone' => '0521112222'])
+            ->assertNotified(__('customers.push_done_no_subscription', ['count' => 1]));
+
+        $this->assertSame(1, Customer::query()->count());
+        $this->assertSame(0, Subscription::query()->count());
+    }
+
+    public function test_the_note_explains_itself_for_every_way_it_can_fail(): void
+    {
+        $this->assertFalse(LegacyNoteParser::explain('')['has_note']);
+        $this->assertFalse(LegacyNoteParser::explain('not json at all')['parsable']);
+
+        $midSignup = LegacyNoteParser::explain(str_replace('"status":"account-active"', '"status":"new-onboarding"', self::NOTE));
+        $this->assertSame('new-onboarding', $midSignup['status']);
+        $this->assertFalse($midSignup['active']);
+        $this->assertSame(1, $midSignup['dogs']);
+
+        $active = LegacyNoteParser::explain(self::NOTE);
+        $this->assertTrue($active['active']);
+        $this->assertSame(1, $active['shippable_dogs']);
+
+        // A dog with no products: present, but nothing to ship.
+        $noProducts = LegacyNoteParser::explain(preg_replace('/"variants":\[.*?\]/s', '"variants":[]', self::NOTE));
+        $this->assertSame(1, $noProducts['dogs']);
+        $this->assertSame(0, $noProducts['shippable_dogs']);
+    }
+
+    /**
+     * The customer payload is cached for five minutes, and the note lives inside it. Reading
+     * the import's decision off a stale copy is what makes the obvious fix — press the button
+     * again once the old system has finished — do nothing at all.
+     */
+    public function test_an_import_reads_the_note_from_shopify_not_from_the_cache(): void
+    {
+        $service = new class extends ShopifyCustomerService
+        {
+            public string $note = '{"status":"new-onboarding","dogs":[]}';
+
+            public int $calls = 0;
+
+            public function __construct() {}
+
+            public function find(string $idOrGid, bool $fresh = false): array
+            {
+                $this->calls++;
+
+                return [
+                    'id' => '900123',
+                    'email' => 'icount@example.com',
+                    'note' => $fresh ? $this->note : 'a stale copy',
+                    'default_address' => [],
+                ];
+            }
+        };
+
+        $this->app->instance(ShopifyCustomerService::class, $service);
+
+        app(LegacyCustomerImporter::class)->import('900123');
+        $service->note = self::NOTE;
+        $result = app(LegacyCustomerImporter::class)->import('900123');
+
+        $this->assertSame(2, $service->calls);
+        $this->assertSame(LegacyCustomerImporter::STATUS_IMPORTED, $result['status']);
     }
 
     // --- what must NOT happen ------------------------------------------------

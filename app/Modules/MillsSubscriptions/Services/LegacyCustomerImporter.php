@@ -49,7 +49,7 @@ class LegacyCustomerImporter
      */
     public function preview(string $idOrGid): array
     {
-        $payload = $this->customers->find($idOrGid);
+        $payload = $this->customers->find($idOrGid, fresh: true);
 
         if ($payload === []) {
             return ['status' => self::STATUS_NOT_FOUND];
@@ -68,6 +68,9 @@ class LegacyCustomerImporter
             'status' => $status,
             'customer' => $payload,
             'note' => $note,
+            'reason' => $status === self::STATUS_NO_NOTE
+                ? self::reason(LegacyNoteParser::explain((string) ($payload['note'] ?? '')))
+                : null,
             // What will actually be stored — the rolled-forward date, not the note's stale one.
             'next_charge_at' => $note !== null
                 ? $this->nextChargeAt($note['next_charge_at'], $note['frequency_months'])?->toDateString()
@@ -85,7 +88,7 @@ class LegacyCustomerImporter
      */
     public function import(string $idOrGid, ?int $adminId = null, ?string $actor = null): array
     {
-        $payload = $this->customers->find($idOrGid);
+        $payload = $this->customers->find($idOrGid, fresh: true);
 
         if ($payload === []) {
             return $this->result(self::STATUS_NOT_FOUND);
@@ -111,12 +114,15 @@ class LegacyCustomerImporter
         $note = LegacyNoteParser::parseActiveNote((string) ($payload['note'] ?? ''));
 
         if ($note === null) {
+            $explained = LegacyNoteParser::explain((string) ($payload['note'] ?? ''));
+
             SystemLog::info('admin', 'customer added from Shopify — no active legacy subscription in the note', [
                 'shopify_customer_id' => $payload['id'],
                 'admin_id' => $adminId,
+                'note' => $explained,
             ], ['customer_id' => $customer->id]);
 
-            return $this->result(self::STATUS_NO_NOTE, $customer->id);
+            return $this->result(self::STATUS_NO_NOTE, $customer->id, reason: self::reason($explained));
         }
 
         [$subscription, $dogs] = DB::transaction(function () use ($customer, $note, $gid, $adminId) {
@@ -276,14 +282,38 @@ class LegacyCustomerImporter
         }
     }
 
-    /** @return array{status: string, customer_id: ?int, subscription_id: ?int, dogs: int} */
-    private function result(string $status, ?int $customerId = null, ?int $subscriptionId = null, int $dogs = 0): array
+    /**
+     * Why the note produced no subscription, in words the admin can act on.
+     *
+     * "No active subscription in the note" is where this used to stop, and it reads as a dead
+     * end. Naming the status the note actually holds turns it into a next step: a signup the
+     * old system was still writing when the button was pressed is imported by pressing it
+     * again a minute later (customer 7397221925168, 2026-09-23).
+     *
+     * @param  array{has_note: bool, parsable: bool, status: ?string, active: bool, dogs: int, shippable_dogs: int}  $explained
+     */
+    private static function reason(array $explained): string
+    {
+        return match (true) {
+            ! $explained['has_note'] => __('customers.note_reason_empty'),
+            ! $explained['parsable'] => __('customers.note_reason_unreadable'),
+            ! $explained['active'] => __('customers.note_reason_status', [
+                'status' => $explained['status'] ?? '—',
+            ]),
+            $explained['dogs'] === 0 => __('customers.note_reason_no_dogs'),
+            default => __('customers.note_reason_no_products'),
+        };
+    }
+
+    /** @return array{status: string, customer_id: ?int, subscription_id: ?int, dogs: int, reason: ?string} */
+    private function result(string $status, ?int $customerId = null, ?int $subscriptionId = null, int $dogs = 0, ?string $reason = null): array
     {
         return [
             'status' => $status,
             'customer_id' => $customerId,
             'subscription_id' => $subscriptionId,
             'dogs' => $dogs,
+            'reason' => $reason,
         ];
     }
 }

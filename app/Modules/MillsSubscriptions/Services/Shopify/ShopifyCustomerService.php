@@ -144,12 +144,23 @@ class ShopifyCustomerService
     /**
      * @return array<string, mixed> empty when not found or unreachable
      */
-    public function find(string $idOrGid): array
+    public function find(string $idOrGid, bool $fresh = false): array
     {
         $numeric = ShopifyId::numeric($idOrGid);
 
         if ($numeric === '' || ! $this->client->isConnected()) {
             return [];
+        }
+
+        /*
+         * An import reads the note to decide whether the customer has a subscription at all,
+         * and the old system rewrites that note several times while a signup completes. A
+         * five-minute-old copy is then the difference between importing a subscription and
+         * silently importing nobody — and it makes the obvious fix, pressing the button
+         * again, do nothing. So an import always asks Shopify itself.
+         */
+        if ($fresh) {
+            Cache::forget("shopify.customer.{$numeric}");
         }
 
         return Cache::remember(

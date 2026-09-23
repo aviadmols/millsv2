@@ -78,7 +78,7 @@ class LegacyLoginTest extends TestCase
                 return $this->customers;
             }
 
-            public function find(string $idOrGid): array
+            public function find(string $idOrGid, bool $fresh = false): array
             {
                 foreach ($this->customers as $c) {
                     if ((string) $c['id'] === (string) $idOrGid) {
