@@ -21,6 +21,9 @@ return [
     'push_help' => 'Enter the number the customer gave you. They are found in Shopify and brought across with whatever subscription is on their note — flagged as needing a card, so nothing is charged until they enter one.',
     'phone' => 'Phone number',
     'phone_help' => 'Any format works: 050-123-4567, 0501234567 or +972501234567.',
+    'action_import_subscription' => 'Import the subscription from the old system',
+    'import_subscription_help' => "The customer's note in Shopify is read now, and an active subscription in it is created here — with billing blocked, so nothing is charged until a card is entered. If the old system was mid-signup when you tried before, this is the button that brings the subscription across once it has finished.",
+
     'push_done' => ':count customer(s) added',
     'push_done_no_subscription' => ':count customer(s) added — but with no subscription',
     'push_retry_help' => 'The customer is in the system, only without a subscription. If they have since finished signing up in the old system, press "Push customer by phone" again and the subscription is imported.',

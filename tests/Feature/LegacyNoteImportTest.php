@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\Customers\Pages\EditCustomer;
 use App\Filament\Resources\Customers\Pages\ListCustomers;
 use App\Models\Customer;
 use App\Models\Dog;
@@ -65,6 +66,14 @@ class LegacyNoteImportTest extends TestCase
                 ];
             }
         });
+    }
+
+    /** The admin actions only offer themselves when Shopify can actually be reached. */
+    private function fakeConnectedShopify(): void
+    {
+        $client = Mockery::mock(ShopifyAdminClient::class);
+        $client->shouldReceive('isConnected')->andReturnTrue();
+        $this->app->instance(ShopifyAdminClient::class, $client);
     }
 
     // --- the parser ----------------------------------------------------------
@@ -233,6 +242,45 @@ class LegacyNoteImportTest extends TestCase
 
         $this->assertSame(1, Customer::query()->count());
         $this->assertSame(0, Subscription::query()->count());
+    }
+
+    /**
+     * The customer is already here, the subscription is not — the case this whole incident
+     * produced. It has to be fixable from the customer in front of you, not only from the
+     * list screen you would have to think to go back to.
+     */
+    public function test_the_subscription_can_be_pulled_in_from_the_customers_own_page(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $this->fakeShopify(self::NOTE);
+        $this->fakeConnectedShopify();
+
+        // Arrived without a subscription — an order webhook, or an import taken mid-signup.
+        $customer = Customer::query()->create([
+            'shopify_customer_id' => '900123',
+            'email' => 'icount@example.com',
+        ]);
+
+        Livewire::test(EditCustomer::class, ['record' => $customer->id])
+            ->callAction('importSubscription');
+
+        $this->assertSame(1, Subscription::query()->count());
+        $this->assertSame($customer->id, Subscription::query()->sole()->customer_id);
+        $this->assertSame(1, Dog::query()->count());
+    }
+
+    public function test_the_pull_in_button_is_hidden_from_a_customer_who_already_has_one(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $this->fakeShopify(self::NOTE);
+        $this->fakeConnectedShopify();
+
+        app(LegacyCustomerImporter::class)->import('900123');
+        $customer = Customer::query()->sole();
+
+        // Importing over a live subscription is how a customer ends up billed twice.
+        Livewire::test(EditCustomer::class, ['record' => $customer->id])
+            ->assertActionHidden('importSubscription');
     }
 
     public function test_the_note_explains_itself_for_every_way_it_can_fail(): void
