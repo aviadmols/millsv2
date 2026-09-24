@@ -175,6 +175,60 @@ class DoubleChargeGuardTest extends TestCase
         $this->assertSame('already_charged', $second['status']);
     }
 
+    /**
+     * Subscription 197, 2026-09-24. The queue worker was stopped overnight, so the
+     * morning's recurring job sat in it unexecuted. An admin charged the customer by hand
+     * at 08:54 — which writes a `manual:` key and advances the cycle — and when the worker
+     * came back at 09:12 the waiting job charged the same customer again under its own
+     * `recurring:` key. Two orders, ₪277.20 each, eighteen minutes apart.
+     *
+     * Every dedupe until now compared keys, and these two paths never share one.
+     */
+    public function test_a_hand_charge_stops_the_queued_job_for_the_same_cycle_from_charging_again(): void
+    {
+        $subscription = $this->subscription();
+        $gateway = $this->gateway(GatewayResult::success('sale-1'));
+
+        // The job the dispatcher queued this morning, pinned to today's due date.
+        $queuedKey = IdempotencyKey::recurring($subscription->id, $subscription->next_charge_at->toDateString());
+
+        // The admin does not wait for the queue and charges by hand.
+        $byHand = app(ChargeOrchestrator::class)->charge(
+            $subscription,
+            IdempotencyKey::CONTEXT_MANUAL,
+            IdempotencyKey::manual($subscription->id, 1, now()->toDateString()),
+        );
+
+        $this->assertTrue($byHand['success']);
+
+        // The worker comes back and runs the job that was waiting in the queue.
+        $queued = app(ChargeOrchestrator::class)->charge(
+            $subscription->fresh(),
+            IdempotencyKey::CONTEXT_RECURRING,
+            $queuedKey,
+        );
+
+        $this->assertSame(1, $gateway->charges, 'the customer must be charged exactly once');
+        $this->assertSame('already_charged', $queued['status']);
+        $this->assertSame(1, PaymentLedger::query()->where('status', LedgerStatus::SUCCEEDED->value)->count());
+    }
+
+    public function test_the_same_customer_is_chargeable_again_on_their_next_cycle(): void
+    {
+        $subscription = $this->subscription();
+        $gateway = $this->gateway(GatewayResult::success('sale-1'));
+
+        app(ChargeOrchestrator::class)->charge($subscription);
+
+        // The wall is 24 hours, not "ever": next month's charge must go through.
+        $this->travel(31)->days();
+
+        $next = app(ChargeOrchestrator::class)->charge($subscription->fresh());
+
+        $this->assertTrue($next['success']);
+        $this->assertSame(2, $gateway->charges);
+    }
+
     // --- 3. a real decline must still retry normally -----------------------------
 
     public function test_a_definite_decline_still_schedules_a_retry_and_can_be_charged_again(): void

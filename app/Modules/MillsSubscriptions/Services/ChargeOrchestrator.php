@@ -100,6 +100,43 @@ class ChargeOrchestrator
             }
 
             /*
+             * THE SAME-DAY WALL, and it is about the SUBSCRIPTION, not the key.
+             *
+             * Everything above dedupes by idempotency key, which holds only while both
+             * attempts agree on the key. They do not when the paths differ: "charge now"
+             * from the admin writes `manual:…` and advances the cycle, while a recurring job
+             * for the old cycle date carries `recurring:{id}:{date}` — a key that has no
+             * ledger row, so every check above waves it through.
+             *
+             * That is exactly what happened to subscription 197 on 2026-09-24: charged by
+             * hand at 08:54 while the queue was stopped, charged again at 09:12 by the job
+             * that had been waiting in it — ₪277.20 twice, eighteen minutes apart.
+             *
+             * No subscription is ever legitimately charged twice within a day: the shortest
+             * cycle here is a month. A second charge inside 24 hours is a duplicate whatever
+             * key it arrives under.
+             */
+            $recent = PaymentLedger::query()
+                ->where('subscription_id', $locked->id)
+                ->where('status', LedgerStatus::SUCCEEDED->value)
+                ->whereIn('context', IdempotencyKey::billingContexts())
+                ->where('executed_at', '>=', now()->subDay())
+                ->latest('executed_at')
+                ->first();
+
+            if ($recent !== null) {
+                SystemLog::warning('billing', 'duplicate charge blocked — this subscription was already charged in the last 24 hours', [
+                    'blocked_key' => $idempotencyKey,
+                    'blocked_context' => $context,
+                    'charged_by' => $recent->idempotency_key,
+                    'charged_at' => $recent->executed_at?->toIso8601String(),
+                    'amount' => $recent->amount,
+                ], ['subscription_id' => $locked->id, 'customer_id' => $locked->customer_id]);
+
+                return [null, ['success' => true, 'status' => 'already_charged']];
+            }
+
+            /*
              * THE LEASE.
              *
              * A `pending` row means a charge for this key is either still in flight or
