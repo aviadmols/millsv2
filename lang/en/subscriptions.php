@@ -16,6 +16,7 @@ return [
     'status_paused' => 'Paused',
     'status_past_due' => 'Past due',
     'status_cancelled' => 'Cancelled',
+    'status_illegal_transition' => 'Cannot change the status from ":from" to ":to".',
 
     'pay_payme' => 'PayMe',
     'pay_needs_card_update' => 'Needs card update',

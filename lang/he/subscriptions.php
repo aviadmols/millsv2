@@ -16,6 +16,7 @@ return [
     'status_paused' => 'מושהה',
     'status_past_due' => 'בפיגור',
     'status_cancelled' => 'מבוטל',
+    'status_illegal_transition' => 'לא ניתן לשנות את הסטטוס מ":from" ל":to".',
 
     'pay_payme' => 'PayMe',
     'pay_needs_card_update' => 'דרוש עדכון כרטיס',

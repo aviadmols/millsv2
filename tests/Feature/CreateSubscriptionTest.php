@@ -125,6 +125,63 @@ class CreateSubscriptionTest extends TestCase
         $this->assertSame($customer->id, Dog::query()->where('name', 'Luna')->firstOrFail()->customer_id);
     }
 
+    public function test_the_status_chosen_on_create_is_the_status_saved(): void
+    {
+        // `status` is guarded; create($data) used to drop it and land every new row on pending.
+        $this->actingAs(User::factory()->create());
+        $customer = Customer::query()->create(['email' => 'st@example.com', 'shopify_customer_id' => '900904']);
+
+        Livewire::test(CreateSubscription::class)
+            ->fillForm([
+                'customer_id' => $customer->id,
+                'status' => SubscriptionStatus::ACTIVE->value,
+                'payment_state' => PaymentState::PAYME->value,
+                'frequency_months' => 1,
+                'dogs' => [],
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(SubscriptionStatus::ACTIVE, Subscription::query()->where('customer_id', $customer->id)->firstOrFail()->status);
+    }
+
+    public function test_a_pending_subscription_can_be_activated_from_the_edit_form(): void
+    {
+        // Subscription 992: set to active, saved, success toast — and still pending.
+        $this->actingAs(User::factory()->create());
+        $customer = Customer::query()->create(['email' => 'act@example.com', 'shopify_customer_id' => '900905']);
+
+        $subscription = new Subscription;
+        $subscription->fill(['customer_id' => $customer->id, 'payment_state' => PaymentState::PAYME->value, 'frequency_months' => 1]);
+        $subscription->forceFill(['status' => SubscriptionStatus::PENDING->value])->save();
+
+        Livewire::test(EditSubscription::class, ['record' => $subscription->getRouteKey()])
+            ->fillForm(['status' => SubscriptionStatus::ACTIVE->value])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(SubscriptionStatus::ACTIVE, $subscription->fresh()->status);
+    }
+
+    public function test_an_illegal_status_change_is_refused_on_the_field_and_nothing_is_saved(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $customer = Customer::query()->create(['email' => 'ill@example.com', 'shopify_customer_id' => '900906']);
+
+        $subscription = new Subscription;
+        $subscription->fill(['customer_id' => $customer->id, 'payment_state' => PaymentState::PAYME->value, 'frequency_months' => 1]);
+        $subscription->forceFill(['status' => SubscriptionStatus::CANCELLED->value])->save();
+
+        Livewire::test(EditSubscription::class, ['record' => $subscription->getRouteKey()])
+            ->fillForm(['status' => SubscriptionStatus::ACTIVE->value, 'frequency_months' => 2])
+            ->call('save')
+            ->assertHasFormErrors(['status']);
+
+        $fresh = $subscription->fresh();
+        $this->assertSame(SubscriptionStatus::CANCELLED, $fresh->status);
+        $this->assertSame(1, $fresh->frequency_months);
+    }
+
     public function test_a_subscription_with_no_dogs_is_still_creatable(): void
     {
         // The dogs can be added afterwards; the default used to be one blank, nameless dog.
