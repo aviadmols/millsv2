@@ -263,6 +263,22 @@ class DashboardTest extends TestCase
         $this->assertSame(2, DashboardMetrics::newSubscriptions(now()->subDay()->startOfDay(), now()));
     }
 
+    public function test_customers_moved_over_from_the_old_system_are_not_counted_as_new(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $this->subscription(); // a checkout
+        $this->subscription()->forceFill(['meta' => ['imported_from' => 'shopify_customer_note']])->save();
+        $this->subscription()->forceFill(['meta' => ['imported_from' => 'shopify_customer_note']])->save();
+
+        $from = now()->subDay();
+        $this->assertSame(1, DashboardMetrics::newSubscriptions($from, now()));
+        $this->assertSame(2, DashboardMetrics::importedSubscriptions($from, now()));
+
+        Livewire::test(MillsStats::class, ['pageFilters' => ['period' => 7]])
+            ->assertSee(__('dashboard.imported_count', ['count' => 2]));
+    }
+
     public function test_an_unknown_period_falls_back_rather_than_becoming_the_window(): void
     {
         // The value arrives from the browser; an arbitrary number here would silently

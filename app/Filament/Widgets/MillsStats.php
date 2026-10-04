@@ -77,8 +77,12 @@ class MillsStats extends BaseWidget
                 ->descriptionIcon('heroicon-m-users')
                 ->color('primary'),
 
+            // Real signups only; the customers who moved over from the old system are named
+            // beside them, not mixed in.
             Stat::make(__('dashboard.new_subscribers', ['window' => $window]), $newSubs)
-                ->description($this->trendText($newTrend, __('dashboard.vs_previous')))
+                ->description($this->trendText($newTrend, __('dashboard.imported_count', [
+                    'count' => DashboardMetrics::importedSubscriptions($from, $to),
+                ])))
                 ->descriptionIcon($this->trendIcon($newTrend))
                 ->color($this->trendColor($newTrend)),
 

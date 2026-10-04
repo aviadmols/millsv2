@@ -97,9 +97,26 @@ final class DashboardMetrics
             ->count();
     }
 
+    /**
+     * Genuinely new subscribers — everything except customers carried over from the old
+     * system. Those arrive as a new ROW the moment they first log in, which counted them as
+     * signups: a week of 26 "new subscribers" was 17 checkouts and 9 old customers.
+     */
     public static function newSubscriptions(Carbon|CarbonImmutable $from, Carbon|CarbonImmutable $to): int
     {
-        return Subscription::query()->whereBetween('created_at', [$from, $to])->count();
+        return Subscription::query()
+            ->whereBetween('created_at', [$from, $to])
+            ->whereNull('meta->imported_from')
+            ->count();
+    }
+
+    /** Old-system customers whose subscription was brought across in a window. */
+    public static function importedSubscriptions(Carbon|CarbonImmutable $from, Carbon|CarbonImmutable $to): int
+    {
+        return Subscription::query()
+            ->whereBetween('created_at', [$from, $to])
+            ->whereNotNull('meta->imported_from')
+            ->count();
     }
 
     /**

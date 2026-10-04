@@ -18,6 +18,7 @@ return [
     'active_subscribers' => 'מנויים פעילים',
     'paused_count' => ':count מושהים',
     'new_subscribers' => 'מנויים חדשים · :window',
+    'imported_count' => ':count עברו מהמערכת הישנה',
     'churned_subscribers' => 'נטישות · :window',
     'failed_charges' => ':count חיובים נכשלו',
     'vs_previous' => 'מול התקופה הקודמת',

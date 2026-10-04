@@ -18,6 +18,7 @@ return [
     'active_subscribers' => 'Active subscribers',
     'paused_count' => ':count paused',
     'new_subscribers' => 'New subscribers · :window',
+    'imported_count' => ':count moved over from the old system',
     'churned_subscribers' => 'Churned · :window',
     'failed_charges' => ':count charges failed',
     'vs_previous' => 'vs the previous period',
