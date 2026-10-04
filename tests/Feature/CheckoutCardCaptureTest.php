@@ -146,14 +146,20 @@ class CheckoutCardCaptureTest extends TestCase
 
     public function test_the_sweep_heals_a_subscription_that_was_ingested_before_this_code_shipped(): void
     {
+        // First pass: Shopify has no transaction data yet → walled subscription (the
+        // state the 27 Aug order is in). Second pass: the transaction is there.
+        $transactions = Http::sequence()
+            ->push(['data' => ['order' => ['transactions' => []]]])
+            ->push(['data' => ['order' => ['transactions' => [
+                ['status' => 'SUCCESS', 'kind' => 'SALE', 'paymentId' => self::PAYMENT_ID],
+            ]]]]);
+
         Http::fake([
-            // First pass: Shopify has no transaction data yet → walled subscription (the
-            // state the 27 Aug order is in). Second pass: the transaction is there.
-            '*/graphql.json' => Http::sequence()
-                ->push(['data' => ['order' => ['transactions' => []]]])
-                ->push(['data' => ['order' => ['transactions' => [
-                    ['status' => 'SUCCESS', 'kind' => 'SALE', 'paymentId' => self::PAYMENT_ID],
-                ]]]]),
+            // The upcoming-order build at signup talks to the same endpoint; it must not
+            // eat the transaction answers this test is sequencing.
+            '*/graphql.json' => fn ($request) => str_contains($request->body(), 'transactions')
+                ? $transactions($request)
+                : Http::response(['errors' => [['message' => 'not in this test']]]),
             'https://payme.test/get-transactions' => Http::response([
                 'status_code' => 0,
                 'items' => [['sale_payme_id' => self::SALE_ID]],

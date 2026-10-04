@@ -238,5 +238,33 @@ class PaidOrderIngestTest extends TestCase
         $subscription = Subscription::query()->firstOrFail();
         $this->assertSame(408.60, (float) $subscription->next_charge_amount);
         $this->assertSame(['66514429149488', '66514423972144'], Dog::query()->firstOrFail()->selected_variants);
+        $this->assertFalse((bool) Dog::query()->firstOrFail()->double_food);
+    }
+
+    public function test_a_checkout_quantity_of_two_becomes_a_double_portion_on_the_dog(): void
+    {
+        // Subscription 921: 2 × ₪171 at checkout, ₪342 charged, ONE bag shipped (#76177).
+        $order = $this->subscriptionOrder(['note_attributes' => []]);
+        $order['line_items'][0]['quantity'] = 2;
+        $order['line_items'][0]['price'] = '171.00';
+
+        $this->deliver($order);
+
+        $this->assertSame(342.00, (float) Subscription::query()->firstOrFail()->next_charge_amount);
+        $this->assertTrue((bool) Dog::query()->firstOrFail()->double_food);
+    }
+
+    public function test_a_quantity_of_two_also_doubles_a_saved_quiz_dog(): void
+    {
+        $customer = Customer::query()->create(['email' => 'buyer@example.com', 'shopify_customer_id' => '8537351520560']);
+        $dog = Dog::query()->create(['customer_id' => $customer->id, 'name' => 'רקסי', 'selected_variants' => ['66514429149488']]);
+        QuizDog::query()->create(['public_id' => 'qd-public-1', 'customer_id' => $customer->id, 'linked_dog_id' => $dog->id, 'payload' => []]);
+
+        $order = $this->subscriptionOrder();
+        $order['line_items'][0]['quantity'] = 2;
+
+        $this->deliver($order);
+
+        $this->assertTrue((bool) $dog->fresh()->double_food);
     }
 }

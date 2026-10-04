@@ -13,6 +13,7 @@ use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Services\Shopify\OrderCreationService;
+use App\Modules\MillsSubscriptions\Support\ChargePreview;
 use App\Modules\MillsSubscriptions\Support\SubscriptionPricing;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use Illuminate\Support\Facades\DB;
@@ -90,6 +91,29 @@ class ChargeOrchestrator
             $amount = $this->resolveAmount($locked);
             if ($amount <= 0) {
                 return [null, ['success' => false, 'status' => 'no_amount']];
+            }
+
+            /*
+             * Never charge more than the order that will be placed.
+             *
+             * The amount is a STORED number; the order is built at charge time from the
+             * products. When the two drift apart the order used to go out anyway with a
+             * "charge exceeds the order total" warning — written after the money had moved.
+             * Subscription 921: charged ₪342 for an order of ₪200 (2026-10-02, #76177).
+             *
+             * The ceiling is the products at full price plus delivery, before any discount:
+             * a discount can only lower the right amount, so anything above this is wrong.
+             * Lines the cache cannot price make the ceiling unknowable, not zero — then this
+             * wall stands aside rather than block a correct charge on a guess.
+             */
+            $ceiling = $this->orderCeiling($locked);
+            if ($ceiling !== null && $amount > $ceiling + 0.01) {
+                SystemLog::error('billing', 'charge blocked — the amount is higher than the order it pays for', [
+                    'amount' => $amount,
+                    'order_total' => $ceiling,
+                ], ['subscription_id' => $locked->id, 'customer_id' => $locked->customer_id]);
+
+                return [null, ['success' => false, 'status' => 'amount_exceeds_order']];
             }
 
             $cycleDate = ($locked->next_charge_at ?? now())->toDateString();
@@ -327,6 +351,21 @@ class ChargeOrchestrator
     private function resolveAmount(Subscription $subscription): float
     {
         return SubscriptionPricing::amount($subscription) ?? 0.0;
+    }
+
+    /**
+     * The most the upcoming order can cost: its products at full price plus delivery.
+     * Null when it cannot be known — no lines at all, or a line the cache cannot price.
+     */
+    private function orderCeiling(Subscription $subscription): ?float
+    {
+        $preview = ChargePreview::for($subscription);
+
+        if ($preview['lines'] === [] || $preview['unpriced'] !== []) {
+            return null;
+        }
+
+        return round($preview['subtotal'] + $preview['shipping_fee'], 2);
     }
 
     /**

@@ -5,8 +5,11 @@ namespace Tests\Feature;
 use App\Domain\Billing\Contracts\PaymentGateway;
 use App\Domain\Billing\GatewayResult;
 use App\Models\Customer;
+use App\Models\Dog;
 use App\Models\PaymentLedger;
 use App\Models\PaymentMethod;
+use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
@@ -136,5 +139,42 @@ class ChargeOrchestratorTest extends TestCase
         $this->assertSame('needs_card_update', $result['status']);
         $this->assertSame(PaymentState::NEEDS_CARD_UPDATE, $sub->refresh()->payment_state);
         $this->assertSame(0, PaymentLedger::query()->count());
+    }
+
+    /** One dog on one ₪171 bag, with whatever amount is stored for the next charge. */
+    private function subscriptionWithOneBag(float $storedAmount): Subscription
+    {
+        $product = Product::query()->create(['shopify_product_id' => 'p-171', 'title' => 'Food']);
+        ProductVariant::query()->create(['shopify_variant_id' => '39357390782621', 'product_id' => $product->id, 'title' => '3kg', 'price' => 171.00]);
+
+        $sub = $this->subscription(['next_charge_amount' => $storedAmount, 'meta' => null]);
+        Dog::withoutEvents(fn () => Dog::query()->create([
+            'customer_id' => $sub->customer_id,
+            'subscription_id' => $sub->id,
+            'status' => 'active',
+            'selected_variants' => ['39357390782621'],
+        ]));
+
+        return $sub->refresh();
+    }
+
+    public function test_a_stored_amount_higher_than_the_order_is_never_charged(): void
+    {
+        // Subscription 921: ₪342 stored, one ₪171 bag on the dog — charged anyway (#76177).
+        $sub = $this->subscriptionWithOneBag(342.00);
+
+        $result = $this->orchestrator(succeed: true)->charge($sub);
+
+        $this->assertFalse($result['success']);
+        $this->assertSame('amount_exceeds_order', $result['status']);
+        $this->assertSame(0, PaymentLedger::query()->count());
+        $this->assertDatabaseHas('system_logs', ['subscription_id' => $sub->id, 'level' => 'error']);
+    }
+
+    public function test_an_amount_within_the_order_still_charges(): void
+    {
+        $sub = $this->subscriptionWithOneBag(153.90); // the bag, discounted
+
+        $this->assertTrue($this->orchestrator(succeed: true)->charge($sub)['success']);
     }
 }

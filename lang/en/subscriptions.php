@@ -130,6 +130,7 @@ return [
     'charge_status_no_charge' => 'This is a no-charge subscription — it is never charged. To charge it, switch its payment to PayMe first.',
     'charge_status_not_active' => 'The subscription is not active.',
     'charge_status_no_amount' => 'The charge amount is unknown.',
+    'charge_status_amount_exceeds_order' => 'The stored charge amount is higher than the upcoming order — the charge was blocked. Rebuild the upcoming order and check the amount.',
     'charge_status_already_charged' => 'This has already been charged today.',
     'charge_status_kill_switch' => 'Billing is switched off system-wide.',
     'charge_status_too_far_behind' => 'This subscription is more than a full cycle behind. Charging it now would bill the customer for cycles they never received. Move the next charge date forward first.',

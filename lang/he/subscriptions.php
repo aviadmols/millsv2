@@ -130,6 +130,7 @@ return [
     'charge_status_no_charge' => 'זהו מנוי ללא חיוב — הוא לא מחויב אף פעם. כדי לחייב אותו, העבר קודם את התשלום ל-PayMe.',
     'charge_status_not_active' => 'המנוי אינו פעיל.',
     'charge_status_no_amount' => 'לא ידוע סכום החיוב.',
+    'charge_status_amount_exceeds_order' => 'סכום החיוב השמור גבוה מסכום ההזמנה הקרובה — החיוב נחסם. בנה מחדש את ההזמנה הקרובה ובדוק את הסכום.',
     'charge_status_already_charged' => 'החיוב כבר בוצע היום.',
     'charge_status_kill_switch' => 'החיובים מושבתים במערכת.',
     'charge_status_too_far_behind' => 'המנוי בפיגור של יותר ממחזור שלם. חיוב עכשיו יגבה מהלקוח על מחזורים שמעולם לא קיבל. הזז קודם את תאריך החיוב הבא.',

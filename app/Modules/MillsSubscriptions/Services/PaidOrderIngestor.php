@@ -11,8 +11,10 @@ use App\Models\Subscription;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use Illuminate\Support\Carbon;
+use Throwable;
 
 /**
  * Turns a paid Shopify order into a subscription (ARCHITECTURE.md §1b, the wiring
@@ -114,6 +116,8 @@ class PaidOrderIngestor
         // reusable token from that payment instead of asking them to type it again.
         // Best-effort: on failure the wall stays and the sweep retries in 15 minutes.
         $this->checkoutCard->attempt($subscription);
+
+        $this->buildUpcomingOrder($subscription);
 
         return $subscription;
     }
@@ -252,13 +256,15 @@ class PaidOrderIngestor
             $lines,
         ), static fn (string $id): bool => $id !== ''));
 
+        $doubleFood = $this->isDoubleFood($subscription, $lines);
+
         $quizDog = $this->quizDogFor($order);
 
         if ($quizDog?->linkedDog !== null) {
             $quizDog->linkedDog->forceFill([
                 'subscription_id' => $subscription->id,
                 'subscription_status' => 'active',
-            ])->save();
+            ] + ($doubleFood ? ['double_food' => true] : []))->save();
 
             if ($quizDog->linkedDog->selected_variants === null && $variantIds !== []) {
                 $quizDog->linkedDog->forceFill(['selected_variants' => $variantIds])->save();
@@ -284,6 +290,7 @@ class PaidOrderIngestor
             'avatar' => isset($noteDog['avatar']) ? (string) $noteDog['avatar'] : null,
             'subscription_status' => 'active',
             'selected_variants' => $variantIds !== [] ? $variantIds : null,
+            'double_food' => $doubleFood,
         ]);
 
         if ($quizDog !== null) {
@@ -292,6 +299,47 @@ class PaidOrderIngestor
                 'linked_dog_id' => $dog->id,
                 'linked_at' => now(),
             ])->save();
+        }
+    }
+
+    /**
+     * Whether the checkout bought the food twice over.
+     *
+     * The quantity is the one thing a variant id does not carry. recurringAmount() counts
+     * it and the dog used to drop it, so subscription 921 signed up for 2 × ₪171, was
+     * charged ₪342 a month later, and was sent ONE bag — the order is built from the dog
+     * (2026-10-02, order #76177). A dog holds a single or a double portion and nothing in
+     * between, so more than two is said out loud instead of rounded away quietly.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     */
+    private function isDoubleFood(Subscription $subscription, array $lines): bool
+    {
+        $quantity = max([1, ...array_map(static fn (array $line): int => (int) ($line['quantity'] ?? 1), $lines)]);
+
+        if ($quantity > 2) {
+            SystemLog::warning('webhook', 'the checkout bought more than a double portion — the dog holds at most two', [
+                'quantity' => $quantity,
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+        }
+
+        return $quantity >= 2;
+    }
+
+    /**
+     * Build the next order now, so the stored charge amount comes from what will actually
+     * ship rather than from the checkout. The first draft used to be built only AFTER the
+     * first charge, so nothing ever checked the checkout figure against the box.
+     * Best-effort: on a Shopify failure the checkout amount stands and the refresh job retries.
+     */
+    private function buildUpcomingOrder(Subscription $subscription): void
+    {
+        try {
+            app(DraftOrderService::class)->refresh($subscription->fresh());
+        } catch (Throwable $e) {
+            SystemLog::warning('shopify', 'could not build the upcoming order for a new subscription', [
+                'message' => $e->getMessage(),
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
         }
     }
 
