@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Storefront;
 
+use App\Modules\MillsSubscriptions\Services\Shopify\CustomerAddressPuller;
 use App\Modules\MillsSubscriptions\Services\Shopify\OrderHistoryService;
 use App\Modules\MillsSubscriptions\Support\StorefrontPresenter;
 use Illuminate\Http\JsonResponse;
@@ -16,9 +17,13 @@ use Illuminate\Http\Request;
  */
 class StorefrontMeController extends AbstractStorefrontController
 {
-    public function show(Request $request): JsonResponse
+    public function show(Request $request, CustomerAddressPuller $addresses): JsonResponse
     {
         $customer = $this->requireCustomer($request);
+
+        // The one exception to "no live Shopify read": a customer with NO address gets the
+        // one Shopify holds, once — after that the local row has it and this is a no-op.
+        $addresses->fromShopify($customer);
 
         return $this->ok(StorefrontPresenter::me($customer));
     }

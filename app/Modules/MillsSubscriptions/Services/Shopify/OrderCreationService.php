@@ -228,6 +228,11 @@ class OrderCreationService
     {
         $customer = $subscription->customer;
 
+        // Last chance for a customer who never got an address locally: the one Shopify has.
+        if ($customer !== null && ! CustomerAddressPuller::hasAddress($customer)) {
+            app(CustomerAddressPuller::class)->fromShopify($customer);
+        }
+
         $address = array_filter([
             'first_name' => $customer?->first_name,
             'last_name' => $customer?->last_name,

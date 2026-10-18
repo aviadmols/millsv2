@@ -62,6 +62,9 @@ final class StorefrontPresenter
             'id' => self::customerId($customer),
             'numeric_id' => (string) ($customer->shopify_customer_id ?? $customer->id),
             'email' => $customer->email,
+            // The settings tab printed these from Liquid `customer`, which the SMS-login
+            // dashboard never has — so every customer saw an empty account box.
+            'phone' => $customer->phone,
             'display_name' => $customer->fullName(),
             'addresses' => array_values(array_filter([self::address($customer)])),
         ];

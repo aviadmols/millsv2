@@ -11,6 +11,7 @@ use App\Models\Subscription;
 use App\Models\SystemLog;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\Shopify\CustomerAddressPuller;
 use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use Illuminate\Support\Carbon;
@@ -61,6 +62,10 @@ class PaidOrderIngestor
 
             return null;
         }
+
+        // The address the shopper just typed into checkout. Before this, a customer created
+        // here had none, and every order shipped to them went out with no address.
+        app(CustomerAddressPuller::class)->fromOrder($customer, $order);
 
         $quiz = $this->quizData($lines);
         $frequency = $this->frequencyMonths($quiz, $lines);
