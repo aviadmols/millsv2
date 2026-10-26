@@ -146,6 +146,30 @@ class PaidOrderIngestTest extends TestCase
         $this->assertSame(0, Customer::query()->count());
     }
 
+    public function test_a_one_time_food_purchase_with_empty_subscription_fields_creates_nothing(): void
+    {
+        // The real shape of #75913: a regular food product, the theme's
+        // subscription fields attached but EMPTY. It became a subscription and was charged.
+        $this->deliver($this->subscriptionOrder([
+            'line_items' => [[
+                'product_id' => 7180000000001,
+                'variant_id' => 39357310664861,
+                'title' => 'עוף, בטטה ועשבי תיבול - מיקרו גרגיר לכלבי טוי',
+                'quantity' => 1,
+                'price' => '171.00',
+                'properties' => [
+                    ['name' => 'תיאור', 'value' => ''],
+                    ['name' => '_subscription', 'value' => ''],
+                    ['name' => 'תדירות', 'value' => ''],
+                    ['name' => 'כלב', 'value' => ''],
+                    ['name' => '_quiz_data', 'value' => ''],
+                ],
+            ]],
+        ]));
+
+        $this->assertSame(0, Subscription::query()->count());
+    }
+
     public function test_an_old_theme_order_with_no_properties_still_counts_by_product(): void
     {
         // The real #71630: only the product line, no properties, no quiz note.

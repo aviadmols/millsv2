@@ -129,8 +129,15 @@ class PaidOrderIngestor
 
     /**
      * The order's subscription line items. A line counts when the theme flagged it
-     * (`_subscription` property) or it sells the hidden pricing product — older
+     * (`_subscription` with a VALUE) or it sells the hidden pricing product — older
      * theme versions attach no properties at all.
+     *
+     * The value matters. The theme attaches `_subscription`, `תדירות` and `_quiz_data` to
+     * every food product it sells — EMPTY on a one-time purchase. Counting the mere presence
+     * of the key turned 80 one-time orders into subscriptions (all regular shop products;
+     * every real signup is the hidden "מנוי מתחדש" product with `_subscription=true`), and
+     * 26 of those customers were then charged for a subscription they never took out
+     * (order #75913 → charge #77507, 2026-10-26).
      *
      * @return list<array<string, mixed>>
      */
@@ -142,7 +149,9 @@ class PaidOrderIngestor
         foreach ((array) ($order['line_items'] ?? []) as $line) {
             $line = (array) $line;
 
-            if ($this->property($line, '_subscription') !== null
+            $flag = mb_strtolower(trim((string) $this->property($line, '_subscription')));
+
+            if (! in_array($flag, ['', 'false', '0', 'no'], true)
                 || ($productId !== null && (string) ($line['product_id'] ?? '') === $productId)) {
                 $lines[] = $line;
             }
