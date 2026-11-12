@@ -82,8 +82,8 @@ Route::middleware(['storefront.token', 'throttle:60,1'])
             ->name('me.catalog');
         Route::patch('me/dogs/{id}/food', [StorefrontOrderEditorController::class, 'updateFood'])
             ->name('me.dogs.food');
-        Route::patch('me/subscription/{id}/next-order-addons', [StorefrontOrderEditorController::class, 'updateAddons'])
-            ->name('me.subscription.next-order-addons');
+        Route::patch('me/subscription/{id}/addons', [StorefrontOrderEditorController::class, 'updateAddons'])
+            ->name('me.subscription.addons');
 
         // Quiz → dog
         Route::post('me/quiz-dogs', [StorefrontDogController::class, 'saveQuiz'])

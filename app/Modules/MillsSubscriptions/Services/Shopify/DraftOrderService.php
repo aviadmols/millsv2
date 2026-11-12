@@ -256,9 +256,9 @@ class DraftOrderService
             }
         }
 
-        // One-time extras for THIS order only (cleared after the charge). Not added on top
-        // of a hand-edited override: that override is the whole order as the admin wrote it.
-        foreach (self::nextOrderAddons($subscription) as $addon) {
+        // The customer's extras (tasting boxes, snacks, toys) — every order, like the food.
+        // Not added on top of a hand-edited override: that is the whole order as the admin wrote it.
+        foreach (self::recurringAddons($subscription) as $addon) {
             $items[] = [
                 'variantId' => ShopifyId::gid($addon['variant_id'], 'ProductVariant'),
                 'quantity' => $addon['quantity'],
@@ -269,15 +269,15 @@ class DraftOrderService
     }
 
     /**
-     * The subscription's one-time extras, cleaned: numeric ids, quantities of at least 1.
+     * The subscription's recurring extras, cleaned: numeric ids, quantities of at least 1.
      *
      * @return list<array{variant_id: string, quantity: int}>
      */
-    public static function nextOrderAddons(Subscription $subscription): array
+    public static function recurringAddons(Subscription $subscription): array
     {
         $addons = [];
 
-        foreach ((array) ($subscription->next_order_addons ?? []) as $line) {
+        foreach ((array) ($subscription->recurring_addons ?? []) as $line) {
             $id = ShopifyId::numeric((string) ($line['variant_id'] ?? ''));
             $quantity = (int) ($line['quantity'] ?? 1);
 

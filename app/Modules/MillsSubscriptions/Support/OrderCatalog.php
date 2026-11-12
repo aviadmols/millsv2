@@ -9,9 +9,9 @@ use Illuminate\Support\Collection;
 /**
  * What a customer may put in their upcoming order, and which of the two kinds it is.
  *
- * FOOD repeats: it lives on the dog (selected_variants / double_food) and is changed from
- * now on. EXTRAS — tasting boxes, snacks, toys — go into the NEXT order only
- * (subscriptions.next_order_addons) and are cleared after it is charged.
+ * Both kinds repeat every order (Aviad, 2026-11-12) — they only live in different places:
+ * FOOD on the dog (selected_variants / double_food, quantity 1 or 2), EXTRAS — tasting
+ * boxes, snacks, toys — on the subscription (subscriptions.recurring_addons, any quantity).
  *
  * The line between them is the pack size parsed from the SKU (15 or 30 daily packs): every
  * food bag has one, and nothing else in the catalog does — tasting boxes and snacks are

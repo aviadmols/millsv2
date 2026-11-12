@@ -17,12 +17,13 @@ use Throwable;
 /**
  * The customer editing their upcoming order from the personal area (2026-11-12).
  *
- * Two kinds of change, decided by Aviad:
- *  - FOOD is permanent: it is the dog's food (selected_variants / double_food), so it is
- *    written on the dog and every cycle from now on ships it. DogObserver rebuilds the
- *    upcoming order and the stored amount.
- *  - EXTRAS — tasting boxes, snacks, toys — are for the NEXT order only
- *    (subscriptions.next_order_addons), cleared once that order is charged.
+ * Every change applies to ALL the orders that follow, food or extra alike (Aviad,
+ * 2026-11-12). The two kinds only live in different places:
+ *  - FOOD is the dog's food (selected_variants / double_food, 1 or 2 of each line), written
+ *    on the dog. DogObserver rebuilds the upcoming order and the stored amount.
+ *  - EXTRAS — tasting boxes, snacks, toys — are subscriptions.recurring_addons, any
+ *    quantity up to MAX_ADDON_QUANTITY, shipped with every order until the customer
+ *    removes them.
  *
  * Both are billing-affecting, so both sit behind the card-update wall, and a cancelled
  * subscription cannot be edited at all.
@@ -105,7 +106,7 @@ class StorefrontOrderEditorController extends AbstractStorefrontController
         return $this->ok(['subscription_id' => $dog->subscription_id]);
     }
 
-    /** PUT me/subscription/{id}/next-order-addons — {items: [{variant_id, quantity}]}. Next order only. */
+    /** PATCH me/subscription/{id}/addons — {items: [{variant_id, quantity}]}. Every order from now on. */
     public function updateAddons(Request $request, string $id): JsonResponse
     {
         $customer = $this->requireCustomer($request);
@@ -140,7 +141,7 @@ class StorefrontOrderEditorController extends AbstractStorefrontController
         }
 
         $subscription->forceFill([
-            'next_order_addons' => $items === [] ? null : $items,
+            'recurring_addons' => $items === [] ? null : $items,
             // The customer's latest word wins over an admin's one-off edit of the same order.
             'line_items_override' => null,
             'line_items_overridden_at' => null,
@@ -154,11 +155,11 @@ class StorefrontOrderEditorController extends AbstractStorefrontController
                 : __('subscriptions.addons_updated_note', ['count' => array_sum(array_column($items, 'quantity'))]),
         ], $subscription->id, $customer->id, Timeline::ACTOR_CUSTOMER);
 
-        SystemLog::info('storefront', 'next-order extras changed by the customer', [
+        SystemLog::info('storefront', 'recurring extras changed by the customer', [
             'items' => $items,
         ], ['subscription_id' => $subscription->id, 'customer_id' => $customer->id]);
 
-        return $this->ok(['subscription_id' => $subscription->id, 'next_order_addons' => $items]);
+        return $this->ok(['subscription_id' => $subscription->id, 'recurring_addons' => $items]);
     }
 
     private function guardEditable(Subscription $subscription): void

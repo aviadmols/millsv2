@@ -19,8 +19,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * The customer edits their upcoming order (2026-11-12): food is permanent and lives on the
- * dog; extras (tasting boxes, snacks, toys) are for the next order only.
+ * The customer edits their upcoming order (2026-11-12): food lives on the
+ * dog; extras (tasting boxes, snacks, toys) on the subscription. Both repeat every order.
  */
 class StorefrontOrderEditorTest extends TestCase
 {
@@ -104,14 +104,14 @@ class StorefrontOrderEditorTest extends TestCase
         $this->assertSame(['1001'], $this->dog->fresh()->selected_variants);
     }
 
-    public function test_extras_go_into_the_next_order_only(): void
+    public function test_extras_are_saved_on_the_subscription_and_ship_with_the_order(): void
     {
-        $this->patchJson("/storefront/me/subscription/{$this->subscription->id}/next-order-addons", [
+        $this->patchJson("/storefront/me/subscription/{$this->subscription->id}/addons", [
             'items' => [['variant_id' => '2001', 'quantity' => 2], ['variant_id' => '3001', 'quantity' => 1]],
         ], $this->headers())->assertOk();
 
         $subscription = $this->subscription->fresh();
-        $this->assertSame([['variant_id' => '2001', 'quantity' => 2], ['variant_id' => '3001', 'quantity' => 1]], $subscription->next_order_addons);
+        $this->assertSame([['variant_id' => '2001', 'quantity' => 2], ['variant_id' => '3001', 'quantity' => 1]], $subscription->recurring_addons);
 
         // The upcoming order now carries the dog's food AND the extras.
         $lines = app(DraftOrderService::class)->lineItems($subscription);
@@ -124,14 +124,14 @@ class StorefrontOrderEditorTest extends TestCase
 
     public function test_food_cannot_be_added_as_an_extra(): void
     {
-        $this->patchJson("/storefront/me/subscription/{$this->subscription->id}/next-order-addons", [
+        $this->patchJson("/storefront/me/subscription/{$this->subscription->id}/addons", [
             'items' => [['variant_id' => '1002', 'quantity' => 1]],
         ], $this->headers())->assertStatus(422)->assertJsonPath('error', 'invalid_addon');
     }
 
-    public function test_the_extras_are_cleared_once_the_next_order_is_charged(): void
+    public function test_the_extras_stay_for_the_following_orders_after_a_charge(): void
     {
-        $this->subscription->forceFill(['next_order_addons' => [['variant_id' => '2001', 'quantity' => 1]]])->save();
+        $this->subscription->forceFill(['recurring_addons' => [['variant_id' => '2001', 'quantity' => 1]]])->save();
         PaymentMethod::query()->create(['customer_id' => $this->customer->id, 'gateway' => 'payme', 'buyer_key' => 'BK', 'is_active' => true, 'captured_at' => now()]);
 
         $gateway = new class implements PaymentGateway
@@ -150,16 +150,17 @@ class StorefrontOrderEditorTest extends TestCase
         $result = (new ChargeOrchestrator($gateway))->charge($this->subscription->fresh());
 
         $this->assertTrue($result['success']);
-        $this->assertNull($this->subscription->fresh()->next_order_addons);
+        // Every change repeats every order (Aviad, 2026-11-12) — a charge does not clear them.
+        $this->assertSame([['variant_id' => '2001', 'quantity' => 1]], $this->subscription->fresh()->recurring_addons);
         $this->assertSame(['1001'], $this->dog->fresh()->selected_variants);
     }
 
-    public function test_the_one_time_button_no_longer_puts_an_extra_on_the_dog_forever(): void
+    public function test_the_add_extra_button_keeps_the_extra_on_the_subscription_not_the_dog(): void
     {
         $this->patchJson("/storefront/me/dogs/{$this->dog->id}/addons/add", ['variantId' => '2001'], $this->headers())->assertOk();
 
         $this->assertEmpty($this->dog->fresh()->addons_products);
-        $this->assertSame([['variant_id' => '2001', 'quantity' => 1]], $this->subscription->fresh()->next_order_addons);
+        $this->assertSame([['variant_id' => '2001', 'quantity' => 1]], $this->subscription->fresh()->recurring_addons);
     }
 
     public function test_a_blocked_or_cancelled_subscription_cannot_be_edited(): void
@@ -170,20 +171,20 @@ class StorefrontOrderEditorTest extends TestCase
 
         $this->subscription->forceFill(['payment_state' => PaymentState::PAYME->value])->save();
         $this->subscription->fresh()->transitionTo(SubscriptionStatus::CANCELLED);
-        $this->patchJson("/storefront/me/subscription/{$this->subscription->id}/next-order-addons", ['items' => []], $this->headers())
+        $this->patchJson("/storefront/me/subscription/{$this->subscription->id}/addons", ['items' => []], $this->headers())
             ->assertStatus(422)->assertJsonPath('error', 'subscription_cancelled');
     }
 
     public function test_me_returns_the_extras_and_the_portion(): void
     {
-        $this->subscription->forceFill(['next_order_addons' => [['variant_id' => '2001', 'quantity' => 2]]])->save();
+        $this->subscription->forceFill(['recurring_addons' => [['variant_id' => '2001', 'quantity' => 2]]])->save();
 
         $response = $this->getJson('/storefront/me', $this->headers())->assertOk();
 
         $sub = $response->json('data.subscriptions.0');
-        $this->assertSame('2001', $sub['next_order_addons'][0]['variant_id']);
-        $this->assertSame(2, $sub['next_order_addons'][0]['quantity']);
-        $this->assertSame(5900, $sub['next_order_addons'][0]['price']);
+        $this->assertSame('2001', $sub['recurring_addons'][0]['variant_id']);
+        $this->assertSame(2, $sub['recurring_addons'][0]['quantity']);
+        $this->assertSame(5900, $sub['recurring_addons'][0]['price']);
         $this->assertFalse($response->json('data.dogs.0.double_food'));
     }
 }

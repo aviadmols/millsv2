@@ -110,15 +110,15 @@ final class StorefrontPresenter
             'original_order_id' => $subscription->original_order_id,
             'dogs' => $dogs->map(fn (Dog $d) => self::dog($d))->values()->all(),
             'subscription_products' => self::subscriptionProducts($subscription),
-            // One-time extras for the next order only, priced like every other line.
-            'next_order_addons' => self::nextOrderAddons($subscription),
+            // The customer's extras, repeated every order, priced like every other line.
+            'recurring_addons' => self::recurringAddons($subscription),
         ];
     }
 
     /** @return list<array<string, mixed>> */
-    private static function nextOrderAddons(Subscription $subscription): array
+    private static function recurringAddons(Subscription $subscription): array
     {
-        $lines = DraftOrderService::nextOrderAddons($subscription);
+        $lines = DraftOrderService::recurringAddons($subscription);
 
         if ($lines === []) {
             return [];

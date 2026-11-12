@@ -37,7 +37,7 @@ class Subscription extends Model
             'discount_percent' => 'decimal:2',
             'line_items_override' => 'array',
             'line_items_overridden_at' => 'datetime',
-            'next_order_addons' => 'array',
+            'recurring_addons' => 'array',
             'next_retry_at' => 'datetime',
             'meta' => 'array',
         ];

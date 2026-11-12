@@ -191,7 +191,7 @@ final class ChargePreview
         }
 
         // Same shelf as DraftOrderService: the one-time extras ride along with the dogs.
-        foreach (DraftOrderService::nextOrderAddons($subscription) as $addon) {
+        foreach (DraftOrderService::recurringAddons($subscription) as $addon) {
             $lines[] = $addon;
         }
 

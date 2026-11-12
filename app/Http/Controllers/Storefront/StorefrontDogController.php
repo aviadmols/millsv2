@@ -85,10 +85,10 @@ class StorefrontDogController extends AbstractStorefrontController
         }
 
         /*
-         * "הוסף מוצר חד-פעמי" means ONE order. It used to append to dogs.addons_products,
-         * which DraftOrderService ships every cycle — so a tasting box added once was billed
-         * forever. It now goes into the subscription's next-order extras, cleared after the
-         * next charge. A dog with no subscription has no next order to add to.
+         * An extra the customer adds repeats every order, like everything they change
+         * (Aviad, 2026-11-12). It is kept on the subscription (recurring_addons), where the
+         * order editor shows it with a quantity and lets them remove it — not on the dog.
+         * A dog with no subscription has no order to add to.
          */
         $subscription = $dog->subscription;
 
@@ -96,17 +96,17 @@ class StorefrontDogController extends AbstractStorefrontController
             return $this->fail('dog_not_in_subscription', 'הכלב אינו משויך למנוי.', 422);
         }
 
-        $addons = collect(DraftOrderService::nextOrderAddons($subscription))->keyBy('variant_id');
+        $addons = collect(DraftOrderService::recurringAddons($subscription))->keyBy('variant_id');
 
         foreach ($variants as $variant) {
             $variantId = ShopifyId::numeric((string) $variant);
             $addons[$variantId] = ['variant_id' => $variantId, 'quantity' => ($addons[$variantId]['quantity'] ?? 0) + 1];
         }
 
-        $subscription->forceFill(['next_order_addons' => $addons->values()->all()])->save();
+        $subscription->forceFill(['recurring_addons' => $addons->values()->all()])->save();
         $this->rebuildUpcomingOrder($subscription);
 
-        SystemLog::info('storefront', 'one-time extra added to the next order', [
+        SystemLog::info('storefront', 'recurring extra added by the customer', [
             'variants' => $variants,
         ], ['subscription_id' => $subscription->id, 'customer_id' => $customer->id]);
 
@@ -124,17 +124,17 @@ class StorefrontDogController extends AbstractStorefrontController
             return $this->fail('variant_id_required', 'נדרש מזהה וריאנט.', 422);
         }
 
-        // From BOTH places: the old recurring add-ons on the dog, and the next-order extras.
+        // From BOTH places: the older add-ons kept on the dog, and the subscription's extras.
         $dog->addons_products = array_values(array_diff($this->currentAddons($dog), $variants));
         $dog->save();
 
         if ($dog->subscription !== null) {
             $ids = array_map(fn ($v) => ShopifyId::numeric((string) $v), $variants);
             $kept = array_values(array_filter(
-                DraftOrderService::nextOrderAddons($dog->subscription),
+                DraftOrderService::recurringAddons($dog->subscription),
                 fn (array $line) => ! in_array($line['variant_id'], $ids, true),
             ));
-            $dog->subscription->forceFill(['next_order_addons' => $kept === [] ? null : $kept])->save();
+            $dog->subscription->forceFill(['recurring_addons' => $kept === [] ? null : $kept])->save();
             $this->rebuildUpcomingOrder($dog->subscription);
         }
 
