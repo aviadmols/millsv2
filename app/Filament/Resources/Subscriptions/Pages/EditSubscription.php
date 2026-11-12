@@ -23,6 +23,20 @@ class EditSubscription extends EditRecord
 {
     protected static string $resource = SubscriptionResource::class;
 
+    /**
+     * What the form showed for these when it opened.
+     *
+     * Both can change underneath an open form — a card update lifts the payment wall, a
+     * customer cancels from their personal area — and saving the form wrote the stale values
+     * straight back. A saved card at 17:18 was "card required" again at 17:20 (subscription
+     * 62, 2026-10-28). Only a field the admin actually changed is written now.
+     *
+     * @var array<string, string|null>
+     */
+    public array $loadedGuardedFields = [];
+
+    private const STALE_GUARDED = ['status', 'payment_state'];
+
     protected function getHeaderActions(): array
     {
         return [
@@ -30,9 +44,28 @@ class EditSubscription extends EditRecord
         ];
     }
 
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        foreach (self::STALE_GUARDED as $field) {
+            $this->loadedGuardedFields[$field] = self::scalar($data[$field] ?? null);
+        }
+
+        return $data;
+    }
+
     /** @param  Subscription  $record */
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
+        // Untouched on the form → not written, so a change made elsewhere since the form
+        // opened survives the save.
+        foreach (self::STALE_GUARDED as $field) {
+            if (array_key_exists($field, $data)
+                && array_key_exists($field, $this->loadedGuardedFields)
+                && self::scalar($data[$field]) === $this->loadedGuardedFields[$field]) {
+                unset($data[$field]);
+            }
+        }
+
         $to = isset($data['status']) ? SubscriptionStatus::tryFrom((string) $data['status']) : null;
         unset($data['status']);
 
@@ -59,5 +92,14 @@ class EditSubscription extends EditRecord
         }
 
         return $record;
+    }
+
+    private static function scalar(mixed $value): ?string
+    {
+        if ($value instanceof \BackedEnum) {
+            return (string) $value->value;
+        }
+
+        return $value === null ? null : (string) $value;
     }
 }

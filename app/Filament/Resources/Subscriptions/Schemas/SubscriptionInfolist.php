@@ -166,7 +166,11 @@ class SubscriptionInfolist
                         ->hiddenLabel()
                         ->badge()
                         ->color('danger')
-                        ->state(__('subscriptions.card_update_required'))
+                        // "No card" was printed even beside a saved card, when only the billing
+                        // state was blocked — which sent support looking for a card that existed.
+                        ->state(fn (Subscription $record) => self::card($record) === null
+                            ? __('subscriptions.card_update_required')
+                            : __('subscriptions.card_blocked'))
                         // A no-charge subscription has no card BY DESIGN — a red "card update
                         // required" on it would send someone chasing a customer for nothing.
                         ->visible(fn (Subscription $record) => $record->payment_state !== PaymentState::NO_CHARGE

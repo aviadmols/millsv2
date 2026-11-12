@@ -11,8 +11,10 @@ use App\Models\MailSetting;
 use App\Modules\MillsSubscriptions\Services\PayMe\PaymeClient;
 use App\Modules\MillsSubscriptions\Services\PayMe\PayMeGateway;
 use App\Modules\MillsSubscriptions\Services\Sms\Sms019Sender;
+use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Services\Sms\SmsSender;
 use App\Observers\DogObserver;
+use App\Observers\SubscriptionObserver;
 use BezhanSalleh\LanguageSwitch\LanguageSwitch;
 use Filament\Facades\Filament;
 use Illuminate\Console\Events\ScheduledTaskFailed;
@@ -42,6 +44,7 @@ class AppServiceProvider extends ServiceProvider
          * one product, the customer charged for another, and the box holding a third.
          */
         Dog::observe(DogObserver::class);
+        Subscription::observe(SubscriptionObserver::class);
 
         // Behind Railway's TLS-terminating proxy the container sees HTTP; force
         // HTTPS URL generation so assets/links aren't Mixed-Content-blocked.

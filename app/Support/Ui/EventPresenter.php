@@ -37,6 +37,8 @@ final class EventPresenter
         Timeline::KIND_ADDRESS_UPDATED => ['info', 'activity.kind_address_updated'],
         Timeline::KIND_DOG_UPDATED => ['info', 'activity.kind_dog_updated'],
         Timeline::KIND_PLAN_UPDATED => ['info', 'activity.kind_plan_updated'],
+        // WARNING: this decides whether the customer gets charged at all.
+        Timeline::KIND_PAYMENT_STATE_CHANGED => ['warning', 'activity.kind_payment_state_changed'],
         Timeline::KIND_ADMIN_NOTE => ['gray', 'activity.kind_admin_note'],
         Timeline::KIND_NOTE => ['gray', 'activity.kind_note'],
     ];
@@ -55,6 +57,15 @@ final class EventPresenter
         'frequency_from', 'frequency_to', 'charge_date_from', 'charge_date_to',
         'full',
     ];
+
+    /** payme / needs_card_update / no_charge in the words the admin screens already use. */
+    private static function paymentStateLabel(mixed $state): string
+    {
+        $state = (string) $state;
+        $key = 'subscriptions.pay_'.$state;
+
+        return $state === '' ? '—' : (__($key) === $key ? $state : __($key));
+    }
 
     public static function tone(ActivityEvent $event): string
     {
@@ -152,6 +163,10 @@ final class EventPresenter
             Timeline::KIND_STATUS_CHANGED => self::statusSummary($d),
             Timeline::KIND_ADDRESS_UPDATED => __('activity.sum_address'),
             Timeline::KIND_PLAN_UPDATED => self::planSummary($d),
+            Timeline::KIND_PAYMENT_STATE_CHANGED => __('activity.sum_payment_state_changed', [
+                'from' => self::paymentStateLabel($d['from'] ?? null),
+                'to' => self::paymentStateLabel($d['to'] ?? null),
+            ]),
             // Rows written before plan_updated existed: all they carry is the list of field
             // names. It is not much, but "the customer changed: subscription status" beats
             // the raw key, and these rows are permanent — they cannot be improved at source.

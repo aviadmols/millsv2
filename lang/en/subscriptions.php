@@ -156,6 +156,7 @@ return [
     'card_captured_at' => 'Saved on',
     'no_card_on_file' => 'No card on file',
     'card_update_required' => 'No card — this subscription will not be charged',
+    'card_blocked' => 'Blocked from charging — a card update is required',
     'action_update_card' => 'Update credit card',
     'action_update_card_help' => 'The customer enters the card on PayMe\'s secure page. To verify it, PayMe makes a ₪:amount charge — a card cannot be saved without one. The link is valid for 15 minutes.',
     'card_update_link' => 'Or send the customer the link',

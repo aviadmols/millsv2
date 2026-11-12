@@ -58,6 +58,15 @@ final class Timeline
      */
     public const KIND_PLAN_UPDATED = 'plan_updated';
 
+    /**
+     * The billing gate moved (payme ⇄ needs_card_update ⇄ no_charge), whoever moved it.
+     *
+     * It used to change silently: a card saved at 17:18 was "card required" again by
+     * 17:20 and nothing on record said who or what put it back (subscription 62,
+     * 2026-10-28). Written by SubscriptionObserver on EVERY change, so no path can skip it.
+     */
+    public const KIND_PAYMENT_STATE_CHANGED = 'payment_state_changed';
+
     // === CONSTANTS: actors ===
     public const ACTOR_SYSTEM = 'system';
 
