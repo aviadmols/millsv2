@@ -160,16 +160,20 @@ class StorefrontContractTest extends TestCase
 
     public function test_addons_can_be_added_and_removed(): void
     {
-        [$customer, , $dog] = $this->customerWithSubscription();
+        // "הוסף מוצר חד-פעמי" is one order: it lands in the subscription's next-order
+        // extras, not on the dog (where it used to repeat every cycle).
+        [$customer, $subscription, $dog] = $this->customerWithSubscription();
         $auth = $this->auth($customer);
 
-        $this->patchJson("/storefront/me/dogs/{$dog->id}/addons/add", ['variantId' => 'v-1'], $auth)
-            ->assertOk()
-            ->assertJsonPath('data.dog.addons_products', ['v-1']);
-
-        $this->patchJson("/storefront/me/dogs/{$dog->id}/addons/remove", ['variantId' => 'v-1'], $auth)
+        $this->patchJson("/storefront/me/dogs/{$dog->id}/addons/add", ['variantId' => 'gid://shopify/ProductVariant/501'], $auth)
             ->assertOk()
             ->assertJsonPath('data.dog.addons_products', []);
+        $this->assertSame([['variant_id' => '501', 'quantity' => 1]], $subscription->fresh()->next_order_addons);
+
+        $this->patchJson("/storefront/me/dogs/{$dog->id}/addons/remove", ['variantId' => '501'], $auth)
+            ->assertOk()
+            ->assertJsonPath('data.dog.addons_products', []);
+        $this->assertNull($subscription->fresh()->next_order_addons);
     }
 
     public function test_removing_the_last_dog_drops_the_subscription_back_to_pending(): void

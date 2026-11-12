@@ -4,11 +4,15 @@ namespace App\Http\Controllers\Storefront;
 
 use App\Models\Dog;
 use App\Models\QuizDog;
+use App\Models\Subscription;
 use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Support\StorefrontPresenter;
+use App\Support\ShopifyId;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Customer-driven dog writes (SYSTEM-MAP §3.3).
@@ -80,15 +84,31 @@ class StorefrontDogController extends AbstractStorefrontController
             return $this->fail('variant_id_required', 'נדרש מזהה וריאנט.', 422);
         }
 
-        $dog->addons_products = array_values(array_unique([
-            ...$this->currentAddons($dog),
-            ...$variants,
-        ]));
-        $dog->save();
+        /*
+         * "הוסף מוצר חד-פעמי" means ONE order. It used to append to dogs.addons_products,
+         * which DraftOrderService ships every cycle — so a tasting box added once was billed
+         * forever. It now goes into the subscription's next-order extras, cleared after the
+         * next charge. A dog with no subscription has no next order to add to.
+         */
+        $subscription = $dog->subscription;
 
-        SystemLog::info('storefront', 'dog add-on added', [
+        if ($subscription === null) {
+            return $this->fail('dog_not_in_subscription', 'הכלב אינו משויך למנוי.', 422);
+        }
+
+        $addons = collect(DraftOrderService::nextOrderAddons($subscription))->keyBy('variant_id');
+
+        foreach ($variants as $variant) {
+            $variantId = ShopifyId::numeric((string) $variant);
+            $addons[$variantId] = ['variant_id' => $variantId, 'quantity' => ($addons[$variantId]['quantity'] ?? 0) + 1];
+        }
+
+        $subscription->forceFill(['next_order_addons' => $addons->values()->all()])->save();
+        $this->rebuildUpcomingOrder($subscription);
+
+        SystemLog::info('storefront', 'one-time extra added to the next order', [
             'variants' => $variants,
-        ], ['subscription_id' => $dog->subscription_id, 'customer_id' => $customer->id]);
+        ], ['subscription_id' => $subscription->id, 'customer_id' => $customer->id]);
 
         return $this->ok(['dog' => StorefrontPresenter::dog($dog->fresh())]);
     }
@@ -104,8 +124,19 @@ class StorefrontDogController extends AbstractStorefrontController
             return $this->fail('variant_id_required', 'נדרש מזהה וריאנט.', 422);
         }
 
+        // From BOTH places: the old recurring add-ons on the dog, and the next-order extras.
         $dog->addons_products = array_values(array_diff($this->currentAddons($dog), $variants));
         $dog->save();
+
+        if ($dog->subscription !== null) {
+            $ids = array_map(fn ($v) => ShopifyId::numeric((string) $v), $variants);
+            $kept = array_values(array_filter(
+                DraftOrderService::nextOrderAddons($dog->subscription),
+                fn (array $line) => ! in_array($line['variant_id'], $ids, true),
+            ));
+            $dog->subscription->forceFill(['next_order_addons' => $kept === [] ? null : $kept])->save();
+            $this->rebuildUpcomingOrder($dog->subscription);
+        }
 
         SystemLog::info('storefront', 'dog add-on removed', [
             'variants' => $variants,
@@ -222,6 +253,18 @@ class StorefrontDogController extends AbstractStorefrontController
     {
         if ($dog->subscription !== null) {
             $this->guardCardUpdate($dog->subscription);
+        }
+    }
+
+    /** Best-effort: the DB is the truth and the draft follows; the next refresh catches up. */
+    private function rebuildUpcomingOrder(Subscription $subscription): void
+    {
+        try {
+            app(DraftOrderService::class)->refresh($subscription->fresh());
+        } catch (Throwable $e) {
+            SystemLog::warning('shopify', 'could not rebuild the upcoming order after a customer edit', [
+                'message' => $e->getMessage(),
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
         }
     }
 }

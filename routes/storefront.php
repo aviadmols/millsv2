@@ -4,6 +4,7 @@ use App\Http\Controllers\Storefront\OtpAuthController;
 use App\Http\Controllers\Storefront\StorefrontAddressController;
 use App\Http\Controllers\Storefront\StorefrontDogController;
 use App\Http\Controllers\Storefront\StorefrontMeController;
+use App\Http\Controllers\Storefront\StorefrontOrderEditorController;
 use App\Http\Controllers\Storefront\StorefrontPaymentController;
 use App\Http\Controllers\Storefront\StorefrontSubscriptionController;
 use Illuminate\Support\Facades\Route;
@@ -74,6 +75,15 @@ Route::middleware(['storefront.token', 'throttle:60,1'])
             ->name('me.dogs.addons.remove');
         Route::post('me/dogs/{id}/remove', [StorefrontDogController::class, 'destroy'])
             ->name('me.dogs.destroy');
+
+        // The customer's own upcoming-order editor: food is permanent (on the dog),
+        // extras are for the next order only. Both behind the card-update wall.
+        Route::get('me/catalog', [StorefrontOrderEditorController::class, 'catalog'])
+            ->name('me.catalog');
+        Route::patch('me/dogs/{id}/food', [StorefrontOrderEditorController::class, 'updateFood'])
+            ->name('me.dogs.food');
+        Route::patch('me/subscription/{id}/next-order-addons', [StorefrontOrderEditorController::class, 'updateAddons'])
+            ->name('me.subscription.next-order-addons');
 
         // Quiz → dog
         Route::post('me/quiz-dogs', [StorefrontDogController::class, 'saveQuiz'])

@@ -8,6 +8,7 @@ use App\Models\ProductVariant;
 use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Support\ShopifyId;
 
 /**
@@ -109,7 +110,33 @@ final class StorefrontPresenter
             'original_order_id' => $subscription->original_order_id,
             'dogs' => $dogs->map(fn (Dog $d) => self::dog($d))->values()->all(),
             'subscription_products' => self::subscriptionProducts($subscription),
+            // One-time extras for the next order only, priced like every other line.
+            'next_order_addons' => self::nextOrderAddons($subscription),
         ];
+    }
+
+    /** @return list<array<string, mixed>> */
+    private static function nextOrderAddons(Subscription $subscription): array
+    {
+        $lines = DraftOrderService::nextOrderAddons($subscription);
+
+        if ($lines === []) {
+            return [];
+        }
+
+        $variants = VariantResolver::resolve(array_column($lines, 'variant_id'))
+            ->keyBy(fn (ProductVariant $v) => (string) $v->shopify_variant_id);
+
+        return array_map(function (array $line) use ($variants): array {
+            $variant = $variants->get($line['variant_id']);
+
+            return array_filter([
+                'variant_id' => $line['variant_id'],
+                'quantity' => $line['quantity'],
+                'name' => $variant !== null ? VariantResolver::label($variant) : null,
+                'price' => $variant !== null ? (int) round(((float) $variant->price) * 100) : null,
+            ], fn ($v) => $v !== null);
+        }, $lines);
     }
 
     /**
@@ -196,6 +223,8 @@ final class StorefrontPresenter
             'avatar' => $dog->avatar,
             'addons_products' => self::variantList($dog->addons_products),
             'selected_variants' => self::variantList($dog->selected_variants),
+            // Every food line ships ×2 when set — the editor's quantity for this dog.
+            'double_food' => (bool) $dog->double_food,
         ];
     }
 

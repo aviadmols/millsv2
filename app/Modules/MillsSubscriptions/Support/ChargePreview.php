@@ -5,6 +5,7 @@ namespace App\Modules\MillsSubscriptions\Support;
 use App\Models\DiscountRule;
 use App\Models\ProductVariant;
 use App\Models\Subscription;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Support\ShopifyId;
 
 /**
@@ -187,6 +188,11 @@ final class ChargePreview
                     'quantity' => $dog->double_food ? 2 : 1,
                 ];
             }
+        }
+
+        // Same shelf as DraftOrderService: the one-time extras ride along with the dogs.
+        foreach (DraftOrderService::nextOrderAddons($subscription) as $addon) {
+            $lines[] = $addon;
         }
 
         return $lines;

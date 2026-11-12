@@ -390,6 +390,11 @@ class ChargeOrchestrator
             ])->save();
         }
 
+        // One-time extras went out with the order just placed; the next cycle is food only.
+        if (! empty($subscription->next_order_addons)) {
+            $subscription->forceFill(['next_order_addons' => null])->save();
+        }
+
         try {
             app(DraftOrderService::class)->refresh($subscription->fresh());
         } catch (Throwable $e) {
