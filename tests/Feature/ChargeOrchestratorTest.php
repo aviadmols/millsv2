@@ -15,6 +15,7 @@ use App\Modules\MillsSubscriptions\Enums\LedgerStatus;
 use App\Modules\MillsSubscriptions\Enums\PaymentState;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
 use App\Modules\MillsSubscriptions\Services\ChargeOrchestrator;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -171,10 +172,68 @@ class ChargeOrchestratorTest extends TestCase
         $this->assertDatabaseHas('system_logs', ['subscription_id' => $sub->id, 'level' => 'error']);
     }
 
-    public function test_an_amount_within_the_order_still_charges(): void
+    public function test_an_amount_matching_the_discounted_order_still_charges(): void
     {
-        $sub = $this->subscriptionWithOneBag(153.90); // the bag, discounted
+        $sub = $this->subscriptionWithOneBag(153.90); // the bag, after the 10% subscription rule
 
         $this->assertTrue($this->orchestrator(succeed: true)->charge($sub)['success']);
+    }
+
+    /** A DraftOrderService that either rebuilds to the live total or fails like Shopify did. */
+    private function fakeDraftRebuild(?float $rebuiltTotal): void
+    {
+        $this->app->instance(DraftOrderService::class, new class($rebuiltTotal) extends DraftOrderService
+        {
+            public int $calls = 0;
+
+            public function __construct(private ?float $total) {}
+
+            public function refresh(Subscription $subscription): array
+            {
+                $this->calls++;
+
+                if ($this->total === null) {
+                    throw new \RuntimeException('email: Email contains an invalid domain name');
+                }
+
+                $subscription->forceFill(['next_charge_amount' => $this->total, 'next_charge_amount_at' => now()])->save();
+
+                return ['total' => $this->total];
+            }
+        });
+    }
+
+    public function test_a_stale_lower_amount_is_rebuilt_and_the_real_order_total_is_charged(): void
+    {
+        // Subscription 971: a second dog added, the old one-dog total charged (#78786).
+        $sub = $this->subscriptionWithOneBag(100.00);
+        $this->fakeDraftRebuild(153.90);
+
+        $result = $this->orchestrator(succeed: true)->charge($sub);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame('153.90', (string) PaymentLedger::query()->sole()->amount);
+        $this->assertDatabaseHas('system_logs', ['subscription_id' => $sub->id, 'level' => 'warning']);
+    }
+
+    public function test_a_stale_amount_that_cannot_be_rebuilt_is_never_charged(): void
+    {
+        $sub = $this->subscriptionWithOneBag(100.00);
+        $this->fakeDraftRebuild(null);
+
+        $result = $this->orchestrator(succeed: true)->charge($sub);
+
+        $this->assertFalse($result['success']);
+        $this->assertSame('amount_mismatch', $result['status']);
+        $this->assertSame(0, PaymentLedger::query()->count());
+    }
+
+    public function test_an_amount_that_already_matches_is_not_rebuilt(): void
+    {
+        $sub = $this->subscriptionWithOneBag(153.90);
+        $this->fakeDraftRebuild(999.00);
+
+        $this->assertTrue($this->orchestrator(succeed: true)->charge($sub)['success']);
+        $this->assertSame('153.90', (string) PaymentLedger::query()->sole()->amount);
     }
 }

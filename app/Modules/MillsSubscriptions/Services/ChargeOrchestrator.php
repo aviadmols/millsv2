@@ -29,6 +29,9 @@ use Throwable;
  */
 class ChargeOrchestrator
 {
+    /** Shekels the stored amount may differ from the live order total before a charge stops. */
+    private const AMOUNT_TOLERANCE = 1.00;
+
     public function __construct(private readonly PaymentGateway $gateway) {}
 
     /**
@@ -41,6 +44,10 @@ class ChargeOrchestrator
 
             return ['success' => false, 'status' => 'kill_switch'];
         }
+
+        // A stored amount that no longer matches the products is rebuilt BEFORE the lock —
+        // the rebuild talks to Shopify and must not hold the row while it does.
+        $this->rebuildIfStale($subscription);
 
         // Lock + preconditions + open the pending ledger row in one transaction.
         [$ledger, $preflight] = DB::transaction(function () use ($subscription, $context, &$idempotencyKey) {
@@ -114,6 +121,29 @@ class ChargeOrchestrator
                 ], ['subscription_id' => $locked->id, 'customer_id' => $locked->customer_id]);
 
                 return [null, ['success' => false, 'status' => 'amount_exceeds_order']];
+            }
+
+            /*
+             * Never charge an amount that is not the order's — in EITHER direction.
+             *
+             * The order is built from the products at charge time; the money is the stored
+             * draft total. When a dog or a flavor changed and the draft was not rebuilt, the
+             * card was charged the OLD total and the gap went onto the invoice as a "discount"
+             * nobody granted: subscription 971 paid ₪534.60 for ₪1,135 of food on 2026-11-17
+             * (#78786, a ₪600.40 "subscription discount"); subscription 1048 paid ₪209 for an
+             * order of ₪359.10 on 2026-11-11. rebuildIfStale() above fixes the number; if it
+             * could not (Shopify down, a customer record Shopify refuses), we stop here
+             * rather than bill a figure we know is wrong. A shekel of tolerance: the preview
+             * and Shopify round on different routes.
+             */
+            $expected = $this->expectedAmount($locked);
+            if ($expected !== null && abs($amount - $expected) > self::AMOUNT_TOLERANCE) {
+                SystemLog::error('billing', 'charge blocked — the stored amount does not match the upcoming order', [
+                    'amount' => $amount,
+                    'expected' => $expected,
+                ], ['subscription_id' => $locked->id, 'customer_id' => $locked->customer_id]);
+
+                return [null, ['success' => false, 'status' => 'amount_mismatch']];
             }
 
             $cycleDate = ($locked->next_charge_at ?? now())->toDateString();
@@ -366,6 +396,58 @@ class ChargeOrchestrator
         }
 
         return round($preview['subtotal'] + $preview['shipping_fee'], 2);
+    }
+
+    /**
+     * What the upcoming order comes to right now — products, discount, delivery — or null
+     * when it cannot be known (no lines, or a line the cache cannot price).
+     */
+    private function expectedAmount(Subscription $subscription): ?float
+    {
+        $preview = ChargePreview::for($subscription);
+
+        if ($preview['lines'] === [] || $preview['unpriced'] !== []) {
+            return null;
+        }
+
+        return round((float) $preview['total'], 2);
+    }
+
+    /**
+     * Rebuild the upcoming order when its stored total has drifted from the products.
+     *
+     * Only for a subscription that is about to be charged at all, and never fatal: a rebuild
+     * that fails leaves the stale number in place, and the wall inside the lock refuses it.
+     */
+    private function rebuildIfStale(Subscription $subscription): void
+    {
+        if ($subscription->currentStatus() !== SubscriptionStatus::ACTIVE
+            || $subscription->payment_state !== PaymentState::PAYME) {
+            return;
+        }
+
+        $expected = $this->expectedAmount($subscription);
+        $stored = SubscriptionPricing::amount($subscription);
+
+        if ($expected === null || ($stored !== null && abs($stored - $expected) <= 0.01)) {
+            return;
+        }
+
+        try {
+            app(DraftOrderService::class)->refresh($subscription);
+
+            SystemLog::warning('billing', 'the stored amount was stale — the upcoming order was rebuilt before charging', [
+                'stored' => $stored,
+                'expected' => $expected,
+                'rebuilt' => $subscription->fresh()?->next_charge_amount,
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+        } catch (Throwable $e) {
+            SystemLog::error('billing', 'the stored amount is stale and the upcoming order could not be rebuilt', [
+                'stored' => $stored,
+                'expected' => $expected,
+                'message' => $e->getMessage(),
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+        }
     }
 
     /**

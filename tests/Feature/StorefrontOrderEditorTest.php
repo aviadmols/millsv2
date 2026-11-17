@@ -131,7 +131,7 @@ class StorefrontOrderEditorTest extends TestCase
 
     public function test_the_extras_stay_for_the_following_orders_after_a_charge(): void
     {
-        $this->subscription->forceFill(['recurring_addons' => [['variant_id' => '2001', 'quantity' => 1]]])->save();
+        $this->subscription->forceFill(['recurring_addons' => [['variant_id' => '2001', 'quantity' => 1]], 'next_charge_amount' => 207.00])->save(); // (171 food + 59 extra) after the 10% rule
         PaymentMethod::query()->create(['customer_id' => $this->customer->id, 'gateway' => 'payme', 'buyer_key' => 'BK', 'is_active' => true, 'captured_at' => now()]);
 
         $gateway = new class implements PaymentGateway
@@ -148,7 +148,6 @@ class StorefrontOrderEditorTest extends TestCase
         };
 
         $result = (new ChargeOrchestrator($gateway))->charge($this->subscription->fresh());
-
         $this->assertTrue($result['success']);
         // Every change repeats every order (Aviad, 2026-11-12) — a charge does not clear them.
         $this->assertSame([['variant_id' => '2001', 'quantity' => 1]], $this->subscription->fresh()->recurring_addons);
