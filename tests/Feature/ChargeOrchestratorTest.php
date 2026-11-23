@@ -123,11 +123,82 @@ class ChargeOrchestratorTest extends TestCase
     public function test_exhausted_retries_move_subscription_to_past_due(): void
     {
         $sub = $this->subscription();
-        $sub->forceFill(['attempt_count' => 3])->save(); // [4,24,72] exhausted
+        $sub->forceFill(['attempt_count' => 4])->save(); // four daily retries spent — this is the fifth attempt
 
         $this->orchestrator(succeed: false)->charge($sub->refresh(), idempotencyKey: 'recurring:'.$sub->id.':final');
 
         $this->assertSame(SubscriptionStatus::PAST_DUE, $sub->refresh()->status);
+    }
+
+    public function test_retries_are_daily_and_five_attempts_in_all(): void
+    {
+        $sub = $this->subscription();
+        $this->orchestrator(succeed: false)->charge($sub);
+
+        $this->assertEqualsWithDelta(now()->addDay()->timestamp, $sub->refresh()->next_retry_at->timestamp, 5);
+
+        // Attempts 2-4 keep the subscription active; the fifth decline is past_due.
+        foreach ([2, 3, 4] as $attempt) {
+            $this->travel(1)->days();
+            $this->orchestrator(succeed: false)->charge($sub->refresh());
+            $this->assertSame(SubscriptionStatus::ACTIVE, $sub->refresh()->status, "attempt {$attempt}");
+        }
+
+        $this->travel(1)->days();
+        $this->orchestrator(succeed: false)->charge($sub->refresh());
+        $this->assertSame(SubscriptionStatus::PAST_DUE, $sub->refresh()->status);
+    }
+
+    public function test_a_second_automatic_attempt_within_a_day_of_a_decline_never_reaches_the_card(): void
+    {
+        // Subscription 766: tried every five minutes after the customer reactivated it.
+        $sub = $this->subscription();
+        $gateway = $this->countingDecliningGateway();
+        $orchestrator = new ChargeOrchestrator($gateway);
+
+        $orchestrator->charge($sub);
+        $sub->refresh()->forceFill(['next_retry_at' => null])->save(); // as a reactivation leaves it
+
+        $this->travel(5)->minutes();
+        $result = $orchestrator->charge($sub->refresh());
+
+        $this->assertSame('retry_not_due', $result['status']);
+        $this->assertSame(1, $gateway->charges);
+        $this->assertTrue($sub->refresh()->next_retry_at->greaterThan(now()->addHours(23)), 'the dispatcher is told to wait');
+    }
+
+    public function test_charge_now_from_the_admin_is_not_held_by_the_daily_wall(): void
+    {
+        $sub = $this->subscription();
+        $gateway = $this->countingDecliningGateway();
+        $orchestrator = new ChargeOrchestrator($gateway);
+
+        $orchestrator->charge($sub);
+        $this->travel(5)->minutes();
+        $orchestrator->charge($sub->refresh(), 'manual', 'manual:'.$sub->id.':test');
+
+        $this->assertSame(2, $gateway->charges);
+    }
+
+    /** A gateway that declines every charge and counts how many times it was asked. */
+    private function countingDecliningGateway(): PaymentGateway
+    {
+        return new class implements PaymentGateway
+        {
+            public int $charges = 0;
+
+            public function chargeWithReference(string $reference, int $amountAgorot, string $idempotencyKey, array $opts = []): GatewayResult
+            {
+                $this->charges++;
+
+                return GatewayResult::failure('20004', 'declined', ['payme_status_code' => 5]);
+            }
+
+            public function lookup(string $idempotencyKey): GatewayResult
+            {
+                return GatewayResult::failure('20004', 'declined');
+            }
+        };
     }
 
     public function test_missing_payment_method_fails_closed_to_needs_card_update(): void

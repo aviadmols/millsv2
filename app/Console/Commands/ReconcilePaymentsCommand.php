@@ -191,7 +191,7 @@ class ReconcilePaymentsCommand extends Command
             return;
         }
 
-        $backoff = (array) config('billing.retry_backoff_hours', [4, 24, 72]);
+        $backoff = (array) config('billing.retry_backoff_hours', [24, 24, 24, 24]);
         $attempt = ((int) $subscription->attempt_count) + 1;
 
         if ($attempt <= count($backoff)) {

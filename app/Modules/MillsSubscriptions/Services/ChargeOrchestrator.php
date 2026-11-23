@@ -191,6 +191,43 @@ class ChargeOrchestrator
             }
 
             /*
+             * THE DAILY WALL: one automatic attempt a day.
+             *
+             * After a decline the next automatic try is a day away, whatever queued this job —
+             * the retry schedule, a customer reactivating from the personal area, a dispatch
+             * that found next_retry_at empty. Subscription 766 was tried every five minutes on
+             * 2026-11-09 because nothing here asked when the card was last tried.
+             *
+             * `charge now` from the admin is exempt: a person chose to try again, now.
+             */
+            if ($context !== IdempotencyKey::CONTEXT_MANUAL) {
+                $lastDecline = PaymentLedger::query()
+                    ->where('subscription_id', $locked->id)
+                    ->whereIn('context', [IdempotencyKey::CONTEXT_RECURRING, IdempotencyKey::CONTEXT_RETRY])
+                    ->whereIn('status', [LedgerStatus::FAILED->value, LedgerStatus::RETRY_SCHEDULED->value])
+                    ->where('executed_at', '>=', now()->subHours((int) config('billing.min_hours_between_attempts', 20)))
+                    ->latest('executed_at')
+                    ->first();
+
+                if ($lastDecline !== null) {
+                    $notBefore = $lastDecline->executed_at->copy()->addDay();
+
+                    // Tell the dispatcher too, so it stops queuing this subscription until then.
+                    if ($locked->next_retry_at === null || $locked->next_retry_at->lt($notBefore)) {
+                        $locked->forceFill(['next_retry_at' => $notBefore])->save();
+                    }
+
+                    SystemLog::info('billing', 'charge deferred — the card was declined less than a day ago', [
+                        'ledger_id' => $lastDecline->id,
+                        'declined_at' => $lastDecline->executed_at->toIso8601String(),
+                        'next_attempt_at' => $notBefore->toIso8601String(),
+                    ], ['subscription_id' => $locked->id, 'customer_id' => $locked->customer_id]);
+
+                    return [null, ['success' => false, 'status' => 'retry_not_due']];
+                }
+            }
+
+            /*
              * THE LEASE.
              *
              * A `pending` row means a charge for this key is either still in flight or
@@ -393,7 +430,7 @@ class ChargeOrchestrator
             'executed_at' => now(),
         ]);
 
-        $backoff = (array) config('billing.retry_backoff_hours', [4, 24, 72]);
+        $backoff = (array) config('billing.retry_backoff_hours', [24, 24, 24, 24]);
         $attempt = ((int) $subscription->attempt_count) + 1;
 
         if ($attempt <= count($backoff)) {

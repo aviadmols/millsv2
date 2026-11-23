@@ -245,6 +245,7 @@ class DoubleChargeGuardTest extends TestCase
         // PayMe said no, so the money definitely did not move — retrying is safe, and must
         // still work. The fix must not break legitimate retries.
         $gateway->setResult(GatewayResult::success('sale-2'));
+        $this->travel(1)->days(); // retries are daily (Aviad, 2026-11-23)
         $second = app(ChargeOrchestrator::class)->charge($subscription->fresh());
 
         $this->assertTrue($second['success']);
@@ -331,6 +332,7 @@ class DoubleChargeGuardTest extends TestCase
         app(ChargeOrchestrator::class)->charge($subscription);
 
         $gateway->setResult(GatewayResult::success('sale-2'));
+        $this->travel(1)->days(); // retries are daily
         app(ChargeOrchestrator::class)->charge($subscription->fresh());
 
         // Both attempts must carry the SAME reference, or PayMe cannot recognise the retry

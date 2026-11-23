@@ -131,6 +131,7 @@ return [
     'charge_status_not_active' => 'The subscription is not active.',
     'charge_status_no_amount' => 'The charge amount is unknown.',
     'charge_status_amount_exceeds_order' => 'The stored charge amount is higher than the upcoming order — the charge was blocked. Rebuild the upcoming order and check the amount.',
+    'charge_status_retry_not_due' => 'The card was declined less than a day ago — the next attempt runs automatically tomorrow. Use "Charge now" to try by hand.',
     'charge_status_ledger_blocked' => 'The charge record for this cycle is in a state that cannot take another charge — blocked before any money moved. Check the charge history.',
     'charge_status_amount_mismatch' => 'The stored charge amount does not match the upcoming order and rebuilding it failed — the charge was blocked. Rebuild the upcoming order and check the amount.',
     'charge_status_already_charged' => 'This has already been charged today.',
