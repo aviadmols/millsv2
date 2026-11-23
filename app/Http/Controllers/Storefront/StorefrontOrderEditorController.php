@@ -37,6 +37,8 @@ class StorefrontOrderEditorController extends AbstractStorefrontController
 
     private const MAX_ADDON_LINES = 20;
 
+    private const MAX_NOTE_LENGTH = 500;
+
     /** GET me/catalog — what can go into an order, split into food and extras. */
     public function catalog(Request $request): JsonResponse
     {
@@ -160,6 +162,37 @@ class StorefrontOrderEditorController extends AbstractStorefrontController
         ], ['subscription_id' => $subscription->id, 'customer_id' => $customer->id]);
 
         return $this->ok(['subscription_id' => $subscription->id, 'recurring_addons' => $items]);
+    }
+
+    /**
+     * PATCH me/subscription/{id}/note — the standing note on every order: {note: string}.
+     * An empty string removes it. The upcoming draft picks it up through SubscriptionObserver.
+     */
+    public function updateNote(Request $request, string $id): JsonResponse
+    {
+        $customer = $this->requireCustomer($request);
+        $subscription = $this->findOwnedSubscription($customer, $id);
+        $this->guardEditable($subscription);
+
+        $note = trim((string) $request->input('note', ''));
+
+        if (mb_strlen($note) > self::MAX_NOTE_LENGTH) {
+            return $this->fail('note_too_long', 'ההערה ארוכה מדי (עד '.self::MAX_NOTE_LENGTH.' תווים).', 422);
+        }
+
+        $subscription->forceFill(['order_note' => $note === '' ? null : $note])->save();
+
+        Timeline::record(Timeline::KIND_NOTE, [
+            'note' => $note === ''
+                ? __('subscriptions.order_note_cleared_note')
+                : __('subscriptions.order_note_updated_note', ['note' => $note]),
+        ], $subscription->id, $customer->id, Timeline::ACTOR_CUSTOMER);
+
+        SystemLog::info('storefront', 'order note changed by the customer', [
+            'length' => mb_strlen($note),
+        ], ['subscription_id' => $subscription->id, 'customer_id' => $customer->id]);
+
+        return $this->ok(['subscription_id' => $subscription->id, 'order_note' => $note === '' ? null : $note]);
     }
 
     private function guardEditable(Subscription $subscription): void

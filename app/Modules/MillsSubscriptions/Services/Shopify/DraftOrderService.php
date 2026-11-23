@@ -368,6 +368,11 @@ class DraftOrderService
             $lineItems,
         ));
 
+        // The standing note, stated every time (null clears one that was removed — a rebuilt
+        // draft must describe the whole order, not inherit the last one's).
+        $note = trim((string) $subscription->order_note);
+        $input['note'] = $note !== '' ? $note : null;
+
         $input['shippingLine'] = $preview['shipping_fee'] > 0
             ? ['title' => $preview['shipping_title'], 'price' => number_format($preview['shipping_fee'], 2, '.', '')]
             : null;

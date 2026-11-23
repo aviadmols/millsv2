@@ -94,6 +94,12 @@ class OrderCreationService
             // through the API — so without this every recurring order arrived unshippable.
             $order = $this->addShippingAddress($order, $subscription, $ledger);
 
+            // The subscription's standing note — written by the customer or an admin — rides
+            // on every order it produces, where the warehouse reads it.
+            if (trim((string) $subscription->order_note) !== '') {
+                $order['note'] = trim((string) $subscription->order_note);
+            }
+
             // The ONLY path that stamps channel attribution — never bypass it.
             $order = ShopifyOrderAttribution::apply($order, $subscription->id);
 

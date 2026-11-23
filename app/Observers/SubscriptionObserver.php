@@ -3,8 +3,11 @@
 namespace App\Observers;
 
 use App\Models\Subscription;
+use App\Models\SystemLog;
+use App\Modules\MillsSubscriptions\Services\Shopify\DraftOrderService;
 use App\Modules\MillsSubscriptions\Support\Timeline;
 use BackedEnum;
+use Throwable;
 
 /**
  * Puts every move of the billing gate on the timeline.
@@ -19,6 +22,18 @@ class SubscriptionObserver
 {
     public function updated(Subscription $subscription): void
     {
+        // The upcoming draft carries the standing note, so a changed note rebuilds it —
+        // whoever changed it (the customer, an admin). Never blocks the save.
+        if ($subscription->wasChanged('order_note') && ! empty($subscription->draft_order_id)) {
+            try {
+                app(DraftOrderService::class)->refresh($subscription->fresh());
+            } catch (Throwable $e) {
+                SystemLog::warning('shopify', 'could not put the changed note on the upcoming order', [
+                    'message' => $e->getMessage(),
+                ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+            }
+        }
+
         if (! $subscription->wasChanged('payment_state')) {
             return;
         }

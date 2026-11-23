@@ -130,6 +130,80 @@ class SubscriptionActions
         return $next;
     }
 
+    /** Whether the subscription ships a double portion — true when any active dog does. */
+    public static function hasDoubleFood(Subscription $subscription): bool
+    {
+        return $subscription->dogs()->where('status', 'active')->where('double_food', true)->exists();
+    }
+
+    /**
+     * Double (or single) portion for the whole subscription: written to every active dog,
+     * since the quantity of the food lines is decided per dog. Each changed dog rebuilds the
+     * upcoming order through DogObserver, so the next charge follows.
+     */
+    public function setDoubleFood(Subscription $subscription, bool $double): int
+    {
+        $changed = 0;
+
+        foreach ($subscription->dogs()->where('status', 'active')->get() as $dog) {
+            if ((bool) $dog->double_food === $double) {
+                continue;
+            }
+
+            $dog->double_food = $double;
+            $dog->save();
+            $changed++;
+        }
+
+        if ($changed > 0) {
+            Timeline::record(Timeline::KIND_NOTE, [
+                'action' => $double ? 'double_food_on' : 'double_food_off',
+                'dogs' => $changed,
+            ], $subscription->id, $subscription->customer_id, $this->actor());
+        }
+
+        return $changed;
+    }
+
+    /**
+     * Set the next charge date to a chosen day — earlier or later than it is now.
+     *
+     * Unlike postponing, this is not "skip a cycle"; it is "the date is wrong, here is the
+     * right one". It must be tomorrow or later: today, or a day already gone, would be
+     * picked up by the next five-minute dispatch and charged on the spot, and a date
+     * change should never be how money moves.
+     */
+    public function changeNextChargeDate(Subscription $subscription, CarbonInterface $date): CarbonInterface
+    {
+        $next = $date->copy()->startOfDay();
+
+        if (! $next->greaterThan(now()->endOfDay())) {
+            throw new RuntimeException('next_charge_date_must_be_after_today');
+        }
+
+        $from = $subscription->next_charge_at;
+
+        $subscription->forceFill([
+            'next_charge_at' => $next,
+            // A new date starts the cycle clean: a retry backoff belongs to the old one.
+            'attempt_count' => 0,
+            'next_retry_at' => null,
+        ])->save();
+
+        Timeline::record(Timeline::KIND_NOTE, [
+            'action' => 'next_charge_date_changed',
+            'from' => $from?->toDateString(),
+            'to' => $next->toDateString(),
+        ], $subscription->id, $subscription->customer_id, $this->actor());
+
+        SystemLog::info('admin', 'next charge date changed', [
+            'from' => $from?->toDateString(),
+            'to' => $next->toDateString(),
+        ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+
+        return $next;
+    }
+
     /**
      * Charge this cycle right now instead of waiting for its date.
      *

@@ -186,4 +186,25 @@ class StorefrontOrderEditorTest extends TestCase
         $this->assertSame(5900, $sub['recurring_addons'][0]['price']);
         $this->assertFalse($response->json('data.dogs.0.double_food'));
     }
+
+    public function test_the_customer_sets_and_clears_a_standing_order_note(): void
+    {
+        $this->patchJson("/storefront/me/subscription/{$this->subscription->id}/note", ['note' => ' להשאיר ליד הדלת '], $this->headers())
+            ->assertOk()
+            ->assertJsonPath('data.order_note', 'להשאיר ליד הדלת');
+
+        $this->assertSame('להשאיר ליד הדלת', $this->subscription->fresh()->order_note);
+        $this->assertSame('להשאיר ליד הדלת', $this->getJson('/storefront/me', $this->headers())->json('data.subscriptions.0.order_note'));
+
+        $this->patchJson("/storefront/me/subscription/{$this->subscription->id}/note", ['note' => ''], $this->headers())->assertOk();
+        $this->assertNull($this->subscription->fresh()->order_note);
+    }
+
+    public function test_a_note_over_500_characters_is_refused(): void
+    {
+        $this->patchJson("/storefront/me/subscription/{$this->subscription->id}/note", ['note' => str_repeat('א', 501)], $this->headers())
+            ->assertStatus(422);
+
+        $this->assertNull($this->subscription->fresh()->order_note);
+    }
 }

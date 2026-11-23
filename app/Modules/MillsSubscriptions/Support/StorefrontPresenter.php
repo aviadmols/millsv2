@@ -112,6 +112,8 @@ final class StorefrontPresenter
             'subscription_products' => self::subscriptionProducts($subscription),
             // The customer's extras, repeated every order, priced like every other line.
             'recurring_addons' => self::recurringAddons($subscription),
+            // The standing note on every order — the customer's or an admin's.
+            'order_note' => $subscription->order_note,
         ];
     }
 

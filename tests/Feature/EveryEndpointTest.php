@@ -288,6 +288,7 @@ class EveryEndpointTest extends TestCase
         // No catalog in this test → an unknown food variant is refused, never a stack trace.
         $this->call_('PATCH', "/storefront/me/dogs/{$dog}/food", ['variant_ids' => ['v-unknown']], $sf, [422]);
         $this->call_('PATCH', "/storefront/me/subscription/{$sub}/addons", ['items' => []], $sf);
+        $this->call_('PATCH', "/storefront/me/subscription/{$sub}/note", ['note' => 'להשאיר ליד הדלת'], $sf);
         $this->call_('POST', '/storefront/me/quiz-dogs', ['name' => 'SF'], $sf);
         $this->call_('POST', '/storefront/me/quiz-dogs/quiz-abc/link', ['variants' => ['v-7']], $sf);
         $this->call_('PATCH', "/storefront/me/subscription/{$sub}/remove-dog", ['dogId' => (string) $dog], $sf);

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Subscriptions\Pages;
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\SubscriptionActions;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
@@ -44,13 +45,31 @@ class EditSubscription extends EditRecord
         ];
     }
 
+    /** The double-portion switch as the form opened, so an untouched switch writes nothing. */
+    public ?bool $loadedDoubleFood = null;
+
+    /** The double-portion choice taken off the save, applied to the dogs after it. */
+    private ?bool $doubleFoodToApply = null;
+
     protected function mutateFormDataBeforeFill(array $data): array
     {
         foreach (self::STALE_GUARDED as $field) {
             $this->loadedGuardedFields[$field] = self::scalar($data[$field] ?? null);
         }
 
+        $data['double_food'] = $this->loadedDoubleFood = SubscriptionActions::hasDoubleFood($this->record);
+
         return $data;
+    }
+
+    protected function afterSave(): void
+    {
+        // After the dogs repeater has saved, so a dog added in the same save is included.
+        if ($this->doubleFoodToApply !== null) {
+            app(SubscriptionActions::class)->setDoubleFood($this->record->fresh(), $this->doubleFoodToApply);
+            $this->loadedDoubleFood = $this->doubleFoodToApply;
+            $this->doubleFoodToApply = null;
+        }
     }
 
     /** @param  Subscription  $record */
@@ -64,6 +83,13 @@ class EditSubscription extends EditRecord
                 && self::scalar($data[$field]) === $this->loadedGuardedFields[$field]) {
                 unset($data[$field]);
             }
+        }
+
+        // Not a subscription column: it belongs to the dogs (afterSave).
+        if (array_key_exists('double_food', $data)) {
+            $double = (bool) $data['double_food'];
+            $this->doubleFoodToApply = $double !== $this->loadedDoubleFood ? $double : null;
+            unset($data['double_food']);
         }
 
         $to = isset($data['status']) ? SubscriptionStatus::tryFrom((string) $data['status']) : null;

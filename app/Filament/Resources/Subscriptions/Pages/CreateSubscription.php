@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Subscriptions\Pages;
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Models\Subscription;
 use App\Modules\MillsSubscriptions\Enums\SubscriptionStatus;
+use App\Modules\MillsSubscriptions\Services\SubscriptionActions;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
 
@@ -31,15 +32,28 @@ class CreateSubscription extends CreateRecord
 
     protected ?bool $hasDatabaseTransactions = true;
 
+    /** The double-portion switch, applied to the dogs once the repeater has created them. */
+    private bool $doubleFood = false;
+
     protected function handleRecordCreation(array $data): Model
     {
         $status = SubscriptionStatus::tryFrom((string) ($data['status'] ?? '')) ?? SubscriptionStatus::PENDING;
         unset($data['status']);
+
+        $this->doubleFood = (bool) ($data['double_food'] ?? false);
+        unset($data['double_food']);
 
         $record = new Subscription;
         $record->fill($data);
         $record->forceFill(['status' => $status->value])->save();
 
         return $record;
+    }
+
+    protected function afterCreate(): void
+    {
+        if ($this->doubleFood) {
+            app(SubscriptionActions::class)->setDoubleFood($this->record->fresh(), true);
+        }
     }
 }

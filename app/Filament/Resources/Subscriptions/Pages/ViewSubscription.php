@@ -89,6 +89,7 @@ class ViewSubscription extends ViewRecord
                 // The subscription's own rhythm.
                 $this->pauseAction(),
                 $this->resumeAction(),
+                $this->changeChargeDateAction(),
                 $this->postponeAction(),
                 $this->buildDraftAction(),
                 // Leaving this screen.
@@ -351,6 +352,59 @@ class ViewSubscription extends ViewRecord
                 }
 
                 Notification::make()->title(__('subscriptions.resumed_ok'))->success()->send();
+                $this->redirect(static::getResource()::getUrl('view', ['record' => $record]));
+            });
+    }
+
+    /** Set the next charge date to any day from tomorrow on — earlier or later. */
+    private function changeChargeDateAction(): Action
+    {
+        return Action::make('changeChargeDate')
+            ->label(__('subscriptions.action_change_charge_date'))
+            ->icon(Heroicon::OutlinedCalendar)
+            ->color('gray')
+            ->modalHeading(__('subscriptions.action_change_charge_date'))
+            ->modalDescription(function (Subscription $record) {
+                $last = PaymentLedger::query()
+                    ->where('subscription_id', $record->id)
+                    ->where('status', LedgerStatus::SUCCEEDED->value)
+                    ->latest('executed_at')
+                    ->first();
+
+                return __('subscriptions.change_charge_date_description', [
+                    'current' => $record->next_charge_at?->format('d/m/Y') ?? '—',
+                    'last' => $last?->executed_at?->timezone('Asia/Jerusalem')->format('d/m/Y') ?? '—',
+                ]);
+            })
+            ->visible(fn (Subscription $record) => $record->status !== SubscriptionStatus::CANCELLED)
+            ->schema(fn (Subscription $record) => [
+                DatePicker::make('date')
+                    ->label(__('subscriptions.change_charge_date_field'))
+                    ->helperText(__('subscriptions.change_charge_date_help'))
+                    ->native(false)
+                    ->displayFormat('d/m/Y')
+                    ->required()
+                    ->minDate(now()->addDay()->startOfDay())
+                    ->default(
+                        $record->next_charge_at !== null && $record->next_charge_at->greaterThan(now()->endOfDay())
+                            ? $record->next_charge_at
+                            : now()->addDay(),
+                    ),
+            ])
+            ->action(function (Subscription $record, array $data) {
+                try {
+                    $date = $this->actions()->changeNextChargeDate($record, Carbon::parse($data['date']));
+                } catch (Throwable $e) {
+                    $this->fail(__('subscriptions.action_failed'), $e->getMessage());
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('subscriptions.change_charge_date_ok', ['date' => $date->format('d/m/Y')]))
+                    ->success()
+                    ->send();
+
                 $this->redirect(static::getResource()::getUrl('view', ['record' => $record]));
             });
     }

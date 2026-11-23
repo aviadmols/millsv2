@@ -16,6 +16,7 @@ use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -99,6 +100,21 @@ class SubscriptionForm
                             ->maxValue(100)
                             ->default(10)
                             ->required(),
+                        /*
+                         * Double food lives on each DOG (the quantity of its food lines).
+                         * Here it is one switch for the whole subscription: the pages write
+                         * it to every active dog on save, and only when it was changed.
+                         */
+                        Toggle::make('double_food')
+                            ->label(__('subscriptions.double_food'))
+                            ->helperText(__('subscriptions.double_food_help'))
+                            ->inline(false),
+                        Textarea::make('order_note')
+                            ->label(__('subscriptions.order_note'))
+                            ->helperText(__('subscriptions.order_note_help'))
+                            ->maxLength(500)
+                            ->rows(2)
+                            ->columnSpanFull(),
                     ]),
 
                 Section::make(__('subscriptions.order_details'))
