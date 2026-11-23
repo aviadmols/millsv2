@@ -223,10 +223,39 @@ class ChargeOrchestrator
                 'payment_method_id' => $method->id,
             ]);
 
-            // A retry of a definite decline reopens the SAME row — put it back into
-            // `pending` so it leases the charge exactly like a first attempt would.
+            /*
+             * A retry of a definite decline reopens the SAME row — put it back into
+             * `pending` so it leases the charge exactly like a first attempt would.
+             *
+             * That includes a row left `failed` after the retries ran out. It used to be
+             * charged while still `failed`: PayMe took the money, `failed → succeeded` is not
+             * a legal move, the job died before recording anything, and the next dispatch
+             * five minutes later charged again. Subscription 766 on 2026-11-09, after the
+             * customer reactivated it from the personal area: ₪442.10 fourteen times in 65
+             * minutes, none of them in this ledger.
+             */
+            if ($row->status === LedgerStatus::FAILED) {
+                Ledger::transition($row, LedgerStatus::RETRY_SCHEDULED);
+            }
+
             if ($row->status === LedgerStatus::RETRY_SCHEDULED) {
                 Ledger::transition($row, LedgerStatus::PENDING);
+            }
+
+            /*
+             * THE INVARIANT: PayMe is called only on a row that is `pending` — a lease this
+             * attempt holds, which a crash leaves behind to block the next one. Anything else
+             * (a refunded row for this key, a state nobody planned for) is refused BEFORE any
+             * money moves, never discovered after.
+             */
+            if ($row->status !== LedgerStatus::PENDING) {
+                SystemLog::error('billing', 'charge blocked — the ledger row for this key cannot hold a new charge', [
+                    'ledger_id' => $row->id,
+                    'idempotency_key' => $idempotencyKey,
+                    'ledger_status' => $row->status instanceof LedgerStatus ? $row->status->value : (string) $row->status,
+                ], ['subscription_id' => $locked->id, 'customer_id' => $locked->customer_id]);
+
+                return [null, ['success' => false, 'status' => 'ledger_blocked']];
             }
 
             return [$row, ['amount' => $amount, 'method_id' => $method->id]];
@@ -306,11 +335,28 @@ class ChargeOrchestrator
      */
     private function onSuccess(Subscription $subscription, PaymentLedger $ledger, ?string $txId, array $raw): array
     {
-        Ledger::transition($ledger, LedgerStatus::SUCCEEDED, [
+        $patch = [
             'payme_transaction_id' => $txId,
             'raw_response_masked' => $raw,
             'executed_at' => now(),
-        ]);
+        ];
+
+        /*
+         * The money has moved. Recording that is not optional, and a state-machine
+         * objection must never be the reason it goes unrecorded — an unrecorded success is
+         * a charge the next run repeats. Record it regardless, and shout.
+         */
+        try {
+            Ledger::transition($ledger, LedgerStatus::SUCCEEDED, $patch);
+        } catch (Throwable $e) {
+            $ledger->forceFill(array_merge($patch, ['status' => LedgerStatus::SUCCEEDED->value]))->save();
+
+            SystemLog::error('billing', 'charge succeeded on a ledger row in an unexpected state — recorded as succeeded anyway', [
+                'ledger_id' => $ledger->id,
+                'transaction_id' => $txId,
+                'message' => $e->getMessage(),
+            ], ['subscription_id' => $subscription->id, 'customer_id' => $subscription->customer_id]);
+        }
 
         $months = max(1, (int) $subscription->frequency_months);
         $base = $subscription->next_charge_at ?? now();

@@ -236,4 +236,77 @@ class ChargeOrchestratorTest extends TestCase
         $this->assertTrue($this->orchestrator(succeed: true)->charge($sub)['success']);
         $this->assertSame('153.90', (string) PaymentLedger::query()->sole()->amount);
     }
+
+    /** A gateway that approves every charge and counts how many times it was asked. */
+    private function countingGateway(): PaymentGateway
+    {
+        return new class implements PaymentGateway
+        {
+            public int $charges = 0;
+
+            public function chargeWithReference(string $reference, int $amountAgorot, string $idempotencyKey, array $opts = []): GatewayResult
+            {
+                $this->charges++;
+
+                return GatewayResult::success('sale_'.$this->charges, ['payme_status_code' => 0]);
+            }
+
+            public function lookup(string $idempotencyKey): GatewayResult
+            {
+                return GatewayResult::success('sale_lookup');
+            }
+        };
+    }
+
+    /** The cycle's ledger row as the retries left it: declined four times, marked failed. */
+    private function exhaustedLedgerRow(Subscription $sub, string $status = 'failed'): PaymentLedger
+    {
+        $key = 'recurring:'.$sub->id.':'.$sub->next_charge_at->toDateString();
+        $row = PaymentLedger::query()->create([
+            'subscription_id' => $sub->id,
+            'customer_id' => $sub->customer_id,
+            'context' => 'recurring',
+            'idempotency_key' => $key,
+            'amount' => 153.90,
+            'currency' => 'ILS',
+            'failure_code' => '20004',
+        ]);
+        $row->forceFill(['status' => $status])->save();
+        $sub->forceFill(['attempt_count' => 4])->save();
+
+        return $row;
+    }
+
+    public function test_a_reactivated_subscription_whose_retries_ran_out_is_charged_once_and_recorded(): void
+    {
+        // Subscription 766, 2026-11-09: reactivated by the customer after four declines,
+        // then charged fourteen times in 65 minutes — every success crashed unrecorded.
+        $sub = $this->subscriptionWithOneBag(153.90);
+        $row = $this->exhaustedLedgerRow($sub);
+        $gateway = $this->countingGateway();
+        $orchestrator = new ChargeOrchestrator($gateway);
+
+        $first = $orchestrator->charge($sub->fresh());
+        $second = $orchestrator->charge($sub->fresh());
+
+        $this->assertTrue($first['success']);
+        $this->assertSame(LedgerStatus::SUCCEEDED, $row->fresh()->status);
+        $this->assertSame('sale_1', $row->fresh()->payme_transaction_id);
+        $this->assertSame('already_charged', $second['status']);
+        $this->assertSame(1, $gateway->charges);
+    }
+
+    public function test_a_refunded_row_for_the_same_cycle_is_never_charged_again(): void
+    {
+        $sub = $this->subscriptionWithOneBag(153.90);
+        $row = $this->exhaustedLedgerRow($sub, 'refunded');
+        $gateway = $this->countingGateway();
+
+        $result = (new ChargeOrchestrator($gateway))->charge($sub->fresh());
+
+        $this->assertFalse($result['success']);
+        $this->assertSame('ledger_blocked', $result['status']);
+        $this->assertSame(0, $gateway->charges);
+        $this->assertSame(LedgerStatus::REFUNDED, $row->fresh()->status);
+    }
 }
